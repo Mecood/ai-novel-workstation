@@ -242,4 +242,17 @@ export const aiApi = {
     api.post(`/projects/${projectId}/consistency/check`),
 };
 
+// === Export ===
+export const exportApi = {
+  download: (projectId: string, projectName: string) => {
+    const url = `${API_BASE}/projects/${projectId}/export`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${projectName.replace(/[/\\]/g, '_')}_export.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  },
+};
+
 export default api;

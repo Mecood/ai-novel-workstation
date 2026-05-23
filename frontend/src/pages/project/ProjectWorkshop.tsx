@@ -9,9 +9,10 @@ import {
   OrderedListOutlined,
   EditOutlined,
   ArrowRightOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
-import { projectApi, chapterApi, characterApi, worldviewApi, foreshadowingApi } from '../../services/api';
+import { projectApi, chapterApi, characterApi, worldviewApi, foreshadowingApi, exportApi } from '../../services/api';
 import type { Project } from '../../services/api';
 
 const { Title, Paragraph } = Typography;
@@ -115,6 +116,15 @@ export default function ProjectWorkshop() {
           ))}
         </Row>
       </Card>
+
+      <div style={{ marginTop: 24, textAlign: 'right' }}>
+        <Button
+          icon={<DownloadOutlined />}
+          onClick={() => exportApi.download(project.id, project.name)}
+        >
+          导出项目
+        </Button>
+      </div>
     </AppLayout>
   );
 }
