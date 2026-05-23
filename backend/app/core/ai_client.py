@@ -1,48 +1,32 @@
 """Unified AI client supporting multiple LLM and Embedding providers."""
 import json
-import os
 from typing import AsyncGenerator, Optional
 
 import httpx
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 class AIClient:
-    """AI client with multiple provider support."""
+    """AI client that takes runtime config (url + api_key + model)."""
 
-    PROVIDERS = {
-        "siliconflow": {
-            "base_url": "https://api.siliconflow.cn/v1",
-            "api_key_env": "SILICONFLOW_API_KEY",
-        },
-        "deepseek": {
-            "base_url": "https://api.deepseek.com/v1",
-            "api_key_env": "DEEPSEEK_API_KEY",
-        },
-    }
-
-    def __init__(self, provider: str = "siliconflow"):
-        if provider not in self.PROVIDERS:
-            raise ValueError(f"Unsupported provider: {provider}")
-        self._provider = provider
-        config = self.PROVIDERS[provider]
-        self.base_url = config["base_url"]
-        self._api_key_env = config["api_key_env"]
-        self._api_key = os.getenv(config["api_key_env"])
+    def __init__(
+        self,
+        url: str,
+        api_key: str,
+        model: Optional[str] = None,
+    ):
+        if not url:
+            raise ValueError("Missing AI provider URL")
+        if not api_key:
+            raise ValueError("Missing AI provider API key")
+        self.base_url = url.rstrip("/")
+        self._api_key = api_key
+        self._model = model
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _ensure_client(self):
-        """Lazily initialize the HTTP client and verify API key."""
-        if self._client is not None:
-            return
-        if not self._api_key:
-            raise ValueError(
-                f"Missing API key: {self._api_key_env}. "
-                f"Set it in .env file or environment variables."
-            )
-        self._client = httpx.AsyncClient(timeout=120.0)
+        """Lazily initialize the HTTP client."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=120.0)
 
     async def chat(
         self,
@@ -54,8 +38,11 @@ class AIClient:
     ) -> str | AsyncGenerator[str, None]:
         """Call chat completion API."""
         await self._ensure_client()
+        selected_model = model or self._model
+        if not selected_model:
+            raise ValueError("Missing model name")
         payload = {
-            "model": model or "Qwen/Qwen2.5-7B-Instruct",
+            "model": selected_model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -99,8 +86,11 @@ class AIClient:
     async def embed(self, text: str, model: Optional[str] = None) -> list[float]:
         """Get text embedding vector."""
         await self._ensure_client()
+        selected_model = model or self._model
+        if not selected_model:
+            raise ValueError("Missing embedding model name")
         payload = {
-            "model": model or "BAAI/bge-m3",
+            "model": selected_model,
             "input": text,
         }
         resp = await self._client.post(

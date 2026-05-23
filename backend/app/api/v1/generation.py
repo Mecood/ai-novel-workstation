@@ -25,7 +25,7 @@ async def generate_story_core(
     if not project:
         raise HTTPException(404, "Project not found")
     
-    content = await ai_service.generate_story_core(project)
+    content = await ai_service.generate_story_core(db, project)
     
     # Update project with story core
     try:
@@ -48,7 +48,7 @@ async def generate_worldview(
         raise HTTPException(404, "Project or story core not found")
     
     story_core_text = json.dumps(project.story_core, ensure_ascii=False)
-    content = await ai_service.generate_worldview(project, story_core_text)
+    content = await ai_service.generate_worldview(db, project, story_core_text)
     
     return {"content": content}
 
@@ -75,7 +75,7 @@ async def generate_characters(
     story_core_text = json.dumps(project.story_core, ensure_ascii=False)
     worldview_text = worldview.description if worldview else "暂无世界观设定"
     
-    content = await ai_service.generate_characters(project, story_core_text, worldview_text)
+    content = await ai_service.generate_characters(db, project, story_core_text, worldview_text)
     
     return {"content": content}
 
@@ -123,7 +123,7 @@ async def generate_chapter(
     async def event_generator():
         full_content = ""
         async for chunk in ai_service.generate_chapter_stream(
-            project, next_number, story_core_text,
+            db, project, next_number, story_core_text,
             worldview_text, characters, chapters,
         ):
             full_content += chunk
@@ -209,7 +209,7 @@ async def check_consistency(
     
     chapter_text = latest_chapter.content.get("text", "") if isinstance(latest_chapter.content, dict) else str(latest_chapter.content)
 
-    result = await ai_service.check_consistency(chapter_text, existing_content)
+    result = await ai_service.check_consistency(db, chapter_text, existing_content)
     return {"content": result}
 
 
@@ -264,7 +264,7 @@ async def regenerate_chapter(
     async def event_generator():
         full_content = ""
         async for chunk in ai_service.generate_chapter_stream(
-            project, target_number, story_core_text,
+            db, project, target_number, story_core_text,
             worldview_text, characters, other_chapters,
         ):
             full_content += chunk
