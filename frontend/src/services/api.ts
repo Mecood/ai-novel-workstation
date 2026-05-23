@@ -225,6 +225,10 @@ export const foreshadowingApi = {
     api.post<Foreshadowing>(`/projects/${projectId}/foreshadowings`, data),
   updateStatus: (projectId: string, id: string, status: string) =>
     api.put(`/projects/${projectId}/foreshadowings/${id}`, { status }),
+  getUnresolved: (projectId: string) =>
+    api.get<{ count: number; overdue: number; items: (Foreshadowing & { is_overdue: boolean })[] }>(
+      `/projects/${projectId}/foreshadowings/unresolved`
+    ),
 };
 
 // === Knowledge Base ===

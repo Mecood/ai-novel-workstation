@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from uuid import UUID
 
 from app.core.database import get_db
 from app.models.project import Project
 from app.models.foreshadowing import Foreshadowing
+from app.models.chapter import Chapter
 from app.schemas.foreshadowing import ForeshadowingCreate, ForeshadowingUpdate, ForeshadowingResponse
 
 router = APIRouter(prefix="/projects/{project_id}/foreshadowings", tags=["foreshadowings"])
@@ -78,3 +79,54 @@ async def update_foreshadowing(
     await db.commit()
     await db.refresh(foreshadowing)
     return ForeshadowingResponse.model_validate(foreshadowing)
+
+
+@router.get("/unresolved")
+async def list_unresolved_foreshadowings(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    project_result = await db.execute(select(Project).where(Project.id == project_id))
+    project = project_result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    max_chapter_result = await db.execute(
+        select(func.max(Chapter.chapter_number)).where(Chapter.project_id == project_id)
+    )
+    max_chapter = max_chapter_result.scalar() or 0
+
+    result = await db.execute(
+        select(Foreshadowing)
+        .where(
+            Foreshadowing.project_id == project_id,
+            Foreshadowing.status.in_(["planted", "active"]),
+        )
+        .order_by(Foreshadowing.target_chapter.asc().nulls_last())
+    )
+    foreshadowings = result.scalars().all()
+
+    items = []
+    overdue_count = 0
+    for f in foreshadowings:
+        is_overdue = (
+            f.target_chapter is not None
+            and max_chapter > 0
+            and f.target_chapter <= max_chapter
+        )
+        if is_overdue:
+            overdue_count += 1
+        items.append({
+            "id": str(f.id),
+            "title": f.title,
+            "description": f.description,
+            "target_chapter": f.target_chapter,
+            "status": f.status,
+            "is_overdue": is_overdue,
+        })
+
+    return {
+        "count": len(items),
+        "overdue": overdue_count,
+        "items": items,
+    }

@@ -1,9 +1,9 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, Space, Popconfirm, Collapse } from 'antd';
+import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, Space, Popconfirm, Collapse, Alert } from 'antd';
 import { EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined, BookOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
-import { chapterApi, aiApi } from '../../services/api';
+import { chapterApi, aiApi, foreshadowingApi } from '../../services/api';
 import type { Chapter } from '../../services/api';
 
 const { Title, Paragraph, Text } = Typography;
@@ -22,6 +22,8 @@ export default function WritingPage() {
   const [previousSummary, setPreviousSummary] = useState<string | null>(null);
   const [summaryChapterCount, setSummaryChapterCount] = useState(0);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [unresolvedCount, setUnresolvedCount] = useState(0);
+  const [unresolvedOverdue, setUnresolvedOverdue] = useState(0);
   const streamRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(() => {
@@ -48,6 +50,16 @@ export default function WritingPage() {
   }, [id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    if (!id) return;
+    foreshadowingApi.getUnresolved(id).then(({ data }) => {
+      setUnresolvedCount(data.count);
+      setUnresolvedOverdue(data.overdue);
+    }).catch(() => {
+      setUnresolvedCount(0);
+      setUnresolvedOverdue(0);
+    });
+  }, [id]);
   useEffect(() => { if (streamRef.current) streamRef.current.scrollTop = streamRef.current.scrollHeight; }, [streamContent]);
 
   const handleGenerate = async () => {
@@ -138,6 +150,24 @@ export default function WritingPage() {
           AI 生成章节
         </Button>
       </div>
+
+      {/* 未回收伏笔提醒 */}
+      {unresolvedCount > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={
+            <span>
+              有 <Text strong>{unresolvedCount}</Text> 个伏笔未回收（其中{' '}
+              <Text strong style={{ color: unresolvedOverdue > 0 ? '#cf1322' : undefined }}>
+                {unresolvedOverdue}
+              </Text>{' '}
+              个已逾期），建议在编写本段时安排回收
+            </span>
+          }
+        />
+      )}
 
       {/* 前情提要折叠面板 */}
       <Collapse

@@ -19,6 +19,7 @@ import {
   Row,
   Col,
   Divider,
+  Alert,
 } from 'antd';
 import {
   OrderedListOutlined,
@@ -30,7 +31,7 @@ import {
   BookOutlined,
 } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
-import { chapterApi, volumeApi } from '../../services/api';
+import { chapterApi, volumeApi, foreshadowingApi } from '../../services/api';
 import type { Chapter, Volume, ChapterOutlineDetail } from '../../services/api';
 
 const { Title, Paragraph, Text } = Typography;
@@ -98,6 +99,8 @@ export default function OutlinePage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm] = Form.useForm();
   const [activeKeys, setActiveKeys] = useState<string[]>([]);
+  const [unresolvedCount, setUnresolvedCount] = useState(0);
+  const [unresolvedOverdue, setUnresolvedOverdue] = useState(0);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -123,6 +126,17 @@ export default function OutlinePage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!id) return;
+    foreshadowingApi.getUnresolved(id).then(({ data }) => {
+      setUnresolvedCount(data.count);
+      setUnresolvedOverdue(data.overdue);
+    }).catch(() => {
+      setUnresolvedCount(0);
+      setUnresolvedOverdue(0);
+    });
+  }, [id]);
 
   const chaptersByVolume = useMemo(() => {
     const map = new Map<string, ChapterDraft[]>();
@@ -475,6 +489,24 @@ export default function OutlinePage() {
           </Button>
         </Space>
       </div>
+
+      {/* 未回收伏笔提醒 */}
+      {unresolvedCount > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={
+            <span>
+              有 <Text strong>{unresolvedCount}</Text> 个伏笔未回收（其中{' '}
+              <Text strong style={{ color: unresolvedOverdue > 0 ? '#cf1322' : undefined }}>
+                {unresolvedOverdue}
+              </Text>{' '}
+              个已逾期），建议在编写本段时安排回收
+            </span>
+          }
+        />
+      )}
 
       {loading ? (
         <Card>
