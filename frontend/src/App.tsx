@@ -8,6 +8,7 @@ import OutlinePage from './pages/project/OutlinePage';
 import WritingPage from './pages/project/WritingPage';
 import ForeshadowingPage from './pages/project/ForeshadowingPage';
 import ConsistencyPage from './pages/project/ConsistencyPage';
+import StoryCorePage from './pages/project/StoryCorePage';
 import KnowledgePage from './pages/project/KnowledgePage';
 import ReaderPage from './pages/project/ReaderPage';
 import ProjectSettingsPage from './pages/project/ProjectSettingsPage';
@@ -42,6 +43,7 @@ function App() {
           <Route path="/projects/:id/outline" element={<OutlinePage />} />
           <Route path="/projects/:id/writing" element={<WritingPage />} />
           <Route path="/projects/:id/foreshadowing" element={<ForeshadowingPage />} />
+          <Route path="/projects/:id/story-core" element={<StoryCorePage />} />
           <Route path="/projects/:id/consistency" element={<ConsistencyPage />} />
           <Route path="/projects/:id/knowledge" element={<KnowledgePage />} />
           <Route path="/projects/:id/reader" element={<ReaderPage />} />

@@ -14,6 +14,7 @@ import {
   BookOutlined,
   ExperimentOutlined,
   ExportOutlined,
+  BulbOutlined,
   ArrowLeftOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
@@ -24,6 +25,7 @@ const { Title } = Typography;
 
 const menuItems = [
   { key: 'workshop', icon: <HomeOutlined />, label: '创作工坊' },
+  { key: 'story-core', icon: <BulbOutlined />, label: '故事核心' },
   { key: 'worldview', icon: <GlobalOutlined />, label: '世界观' },
   { key: 'characters', icon: <TeamOutlined />, label: '角色' },
   { key: 'outline', icon: <OrderedListOutlined />, label: '大纲规划' },
