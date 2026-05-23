@@ -15,6 +15,7 @@ import {
   ExperimentOutlined,
   ExportOutlined,
   BulbOutlined,
+  ThunderboltOutlined,
   ArrowLeftOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
@@ -33,6 +34,7 @@ const menuItems = [
   { key: 'foreshadowing', icon: <LinkOutlined />, label: '伏笔' },
   { key: 'consistency', icon: <CheckCircleOutlined />, label: '一致性' },
   { key: 'knowledge', icon: <BookOutlined />, label: '知识库' },
+  { key: 'prompt-templates', icon: <ThunderboltOutlined />, label: 'Prompt 模板' },
   { key: 'reader', icon: <ReadOutlined />, label: '阅读器' },
   { type: 'divider' as const },
   { key: 'settings', icon: <SettingOutlined />, label: '项目设置' },

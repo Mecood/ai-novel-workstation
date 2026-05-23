@@ -263,6 +263,31 @@ export const knowledgeApi = {
     api.delete(`/projects/${projectId}/knowledges/${id}`),
 };
 
+// === Prompt Template ===
+export interface PromptTemplate {
+  id: string;
+  project_id: string;
+  name: string;
+  category: string;
+  system_prompt?: string | null;
+  user_prompt_template?: string | null;
+  parameters?: Record<string, any> | null;
+  is_default: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const promptTemplateApi = {
+  list: (projectId: string) =>
+    api.get<PromptTemplate[]>(`/projects/${projectId}/prompt-templates`),
+  create: (projectId: string, data: any) =>
+    api.post<PromptTemplate>(`/projects/${projectId}/prompt-templates`, data),
+  update: (projectId: string, templateId: string, data: any) =>
+    api.put<PromptTemplate>(`/projects/${projectId}/prompt-templates/${templateId}`, data),
+  delete: (projectId: string, templateId: string) =>
+    api.delete(`/projects/${projectId}/prompt-templates/${templateId}`),
+};
+
 // === Settings ===
 export interface ProviderConfig {
   name: string;
