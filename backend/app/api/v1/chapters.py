@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -103,3 +103,38 @@ async def delete_chapter(
 
     await db.delete(chapter)
     await db.commit()
+
+
+@router.get("/previous-summary")
+async def get_previous_summary(
+    project_id: UUID,
+    current_chapter: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    project_result = await db.execute(select(Project).where(Project.id == project_id))
+    if not project_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    query = select(Chapter).where(Chapter.project_id == project_id)
+    if current_chapter is not None:
+        query = query.where(Chapter.chapter_number < current_chapter)
+    query = query.order_by(Chapter.chapter_number.asc())
+
+    result = await db.execute(query)
+    chapters = result.scalars().all()
+
+    completed = [
+        ch for ch in chapters
+        if ch.summary and ch.summary.strip()
+    ]
+
+    if not completed:
+        return {"summary": None, "chapter_count": 0}
+
+    parts = [
+        f"### 第{ch.chapter_number}章 {ch.title}\n\n{ch.summary.strip()}"
+        for ch in completed
+    ]
+    summary_text = "\n\n".join(parts)
+
+    return {"summary": summary_text, "chapter_count": len(completed)}

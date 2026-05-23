@@ -118,6 +118,11 @@ export const chapterApi = {
     api.put<Chapter>(`/projects/${projectId}/chapters/${chapterId}`, data),
   delete: (projectId: string, chapterId: string) =>
     api.delete(`/projects/${projectId}/chapters/${chapterId}`),
+  previousSummary: (projectId: string, currentChapter?: number) =>
+    api.get<{ summary: string | null; chapter_count: number }>(
+      `/projects/${projectId}/chapters/previous-summary`,
+      { params: currentChapter ? { current_chapter: currentChapter } : {} }
+    ),
 };
 
 // === Volume ===

@@ -1,7 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, Space, Popconfirm } from 'antd';
-import { EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, Space, Popconfirm, Collapse } from 'antd';
+import { EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined, BookOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import { chapterApi, aiApi } from '../../services/api';
 import type { Chapter } from '../../services/api';
@@ -18,6 +18,9 @@ export default function WritingPage() {
   const [streamContent, setStreamContent] = useState('');
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [editingContent, setEditingContent] = useState('');
+  const [previousSummary, setPreviousSummary] = useState<string | null>(null);
+  const [summaryChapterCount, setSummaryChapterCount] = useState(0);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const streamRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(() => {
@@ -29,6 +32,18 @@ export default function WritingPage() {
     }).catch(() => {
       message.error('加载章节失败');
     }).finally(() => setLoading(false));
+  }, [id]);
+
+  const fetchPreviousSummary = useCallback((currentChapter?: number) => {
+    if (!id) return;
+    setSummaryLoading(true);
+    chapterApi.previousSummary(id, currentChapter).then(({ data }) => {
+      setPreviousSummary(data.summary);
+      setSummaryChapterCount(data.chapter_count);
+    }).catch(() => {
+      setPreviousSummary(null);
+      setSummaryChapterCount(0);
+    }).finally(() => setSummaryLoading(false));
   }, [id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -55,6 +70,7 @@ export default function WritingPage() {
     setSelectedChapter(ch);
     const content = typeof ch.content === 'string' ? ch.content : JSON.stringify(ch.content || '');
     setEditingContent(content);
+    fetchPreviousSummary(ch.chapter_number);
   };
 
   const handleSave = async () => {
@@ -99,6 +115,47 @@ export default function WritingPage() {
           AI 生成章节
         </Button>
       </div>
+
+      {/* 前情提要折叠面板 */}
+      <Collapse
+        style={{ marginBottom: 16, background: '#fafafa' }}
+        items={[
+          {
+            key: 'previous-summary',
+            label: (
+              <Space>
+                <BookOutlined />
+                <Text strong>前情提要</Text>
+                {summaryChapterCount > 0 && (
+                  <Text type="secondary">基于前 {summaryChapterCount} 章自动生成</Text>
+                )}
+              </Space>
+            ),
+            children: summaryLoading ? (
+              <Spin />
+            ) : previousSummary ? (
+              <Paragraph
+                style={{
+                  whiteSpace: 'pre-wrap',
+                  fontFamily: 'inherit',
+                  lineHeight: 1.8,
+                  margin: 0,
+                }}
+              >
+                {previousSummary}
+              </Paragraph>
+            ) : (
+              <Text type="secondary">
+                {selectedChapter
+                  ? selectedChapter.chapter_number <= 1
+                    ? '这是第一章，没有前情提要'
+                    : '前面的章节暂无摘要内容'
+                  : '请从左侧选择章节查看前情提要'}
+              </Text>
+            ),
+          },
+        ]}
+      />
 
       <div style={{ display: 'flex', gap: 16 }}>
         {/* 左侧章节列表 */}
