@@ -1,6 +1,7 @@
 """AI generation API routes with SSE streaming."""
 import json
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -207,6 +208,77 @@ async def check_consistency(
         existing_content.append({"type": "chapter", "number": ch.chapter_number, "summary": ch.summary})
     
     chapter_text = latest_chapter.content.get("text", "") if isinstance(latest_chapter.content, dict) else str(latest_chapter.content)
-    
+
     result = await ai_service.check_consistency(chapter_text, existing_content)
     return {"content": result}
+
+
+@router.post("/chapters/{chapter_id}/regenerate")
+async def regenerate_chapter(
+    project_id: str,
+    chapter_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Stream regenerate an existing chapter in place, replacing its content."""
+    from sqlalchemy import select
+    from app.models.worldview import Worldview
+    from app.models.character import Character
+    from app.models.chapter import Chapter
+
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    # Load target chapter
+    result = await db.execute(
+        select(Chapter).where(Chapter.id == chapter_id, Chapter.project_id == project_id)
+    )
+    chapter = result.scalar_one_or_none()
+    if not chapter:
+        raise HTTPException(404, "Chapter not found")
+
+    # Get worldview
+    result = await db.execute(
+        select(Worldview).where(Worldview.project_id == project_id)
+    )
+    worldview = result.scalar_one_or_none()
+
+    # Get characters
+    result = await db.execute(
+        select(Character).where(Character.project_id == project_id)
+    )
+    characters = list(result.scalars().all())
+
+    # Get other chapters (exclude the one being regenerated to avoid self-reference)
+    result = await db.execute(
+        select(Chapter)
+        .where(Chapter.project_id == project_id, Chapter.id != chapter_id)
+        .order_by(Chapter.chapter_number.desc())
+    )
+    other_chapters = list(result.scalars().all())
+
+    story_core_text = json.dumps(project.story_core, ensure_ascii=False) if project.story_core else ""
+    worldview_text = worldview.description if worldview else ""
+    target_number = chapter.chapter_number
+
+    async def event_generator():
+        full_content = ""
+        async for chunk in ai_service.generate_chapter_stream(
+            project, target_number, story_core_text,
+            worldview_text, characters, other_chapters,
+        ):
+            full_content += chunk
+            yield {"event": "chunk", "data": chunk}
+
+        # Update chapter content in place, preserve title/number/summary/status
+        chapter.content = {"text": full_content}
+        chapter.word_count = len(full_content)
+        await db.commit()
+
+        yield {"event": "done", "data": json.dumps({
+            "chapter_id": str(chapter_id),
+            "chapter_number": target_number,
+            "word_count": len(full_content),
+        })}
+
+    return EventSourceResponse(event_generator())

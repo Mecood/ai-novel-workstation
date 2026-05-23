@@ -123,6 +123,40 @@ export const chapterApi = {
       `/projects/${projectId}/chapters/previous-summary`,
       { params: currentChapter ? { current_chapter: currentChapter } : {} }
     ),
+  regenerate: (projectId: string, chapterId: string, onChunk: (text: string) => void) => {
+    return fetch(`${API_BASE}/projects/${projectId}/chapters/${chapterId}/regenerate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }).then(async (response) => {
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.text) onChunk(parsed.text);
+            } catch {
+              onChunk(data);
+            }
+          }
+        }
+      }
+    });
+  },
 };
 
 // === Volume ===

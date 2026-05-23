@@ -14,6 +14,7 @@ export default function WritingPage() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [streamContent, setStreamContent] = useState('');
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
@@ -73,15 +74,16 @@ export default function WritingPage() {
     fetchPreviousSummary(ch.chapter_number);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (contentOverride?: string) => {
     if (!id || !selectedChapter) return;
+    const content = typeof contentOverride === 'string' ? contentOverride : editingContent;
     setSaving(true);
     try {
       await chapterApi.update(id, selectedChapter.id, {
-        content: editingContent,
+        content,
         title: selectedChapter.title,
         status: selectedChapter.status,
-        word_count: editingContent.length,
+        word_count: content.length,
       } as any);
       message.success('保存成功');
       fetchData();
@@ -89,6 +91,27 @@ export default function WritingPage() {
       message.error('保存失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!id || !selectedChapter) return;
+    setRegenerating(true);
+    setStreamContent('');
+    let accumulated = '';
+    try {
+      await chapterApi.regenerate(id, selectedChapter.id, (chunk) => {
+        accumulated += chunk;
+        setStreamContent((prev) => prev + chunk);
+      });
+      setEditingContent(accumulated);
+      message.success('重新生成完成');
+      fetchData();
+    } catch (err) {
+      message.error('重新生成失败');
+    } finally {
+      setRegenerating(false);
+      setStreamContent('');
     }
   };
 
@@ -233,7 +256,21 @@ export default function WritingPage() {
                 style={{ fontFamily: 'inherit', lineHeight: 1.8 }}
               />
               <div style={{ textAlign: 'right', marginTop: 12 }}>
-                <Button type="primary" icon={<SendOutlined />} loading={saving} onClick={handleSave}>保存</Button>
+                <Space>
+                  <Popconfirm
+                    title="确认重新生成此章节？"
+                    description="已编辑的内容将被替换为 AI 重新生成的内容，且无法恢复。"
+                    onConfirm={handleRegenerate}
+                    okText="确认重新生成"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button icon={<ThunderboltOutlined />} loading={regenerating} disabled={saving}>
+                      重新生成
+                    </Button>
+                  </Popconfirm>
+                  <Button type="primary" icon={<SendOutlined />} loading={saving} disabled={regenerating} onClick={() => handleSave()}>保存</Button>
+                </Space>
               </div>
             </Card>
           ) : (
