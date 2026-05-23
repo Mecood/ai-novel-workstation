@@ -81,6 +81,13 @@ export const characterApi = {
 };
 
 // === Chapter ===
+export interface ChapterOutlineDetail {
+  events?: string;
+  hooks?: string;
+  highlights?: string;
+  suspense?: string;
+}
+
 export interface Chapter {
   id: string;
   project_id: string;
@@ -88,6 +95,7 @@ export interface Chapter {
   title: string;
   content: any;
   summary: string;
+  outline_detail?: ChapterOutlineDetail | null;
   word_count: number;
   status: string;
   created_at: string;
@@ -98,6 +106,7 @@ export interface ChapterCreate {
   title?: string;
   content?: any;
   summary?: string;
+  outline_detail?: ChapterOutlineDetail | null;
   word_count?: number;
   status?: string;
 }
@@ -109,6 +118,48 @@ export const chapterApi = {
     api.put<Chapter>(`/projects/${projectId}/chapters/${chapterId}`, data),
   delete: (projectId: string, chapterId: string) =>
     api.delete(`/projects/${projectId}/chapters/${chapterId}`),
+};
+
+// === Volume ===
+export interface Volume {
+  id: string;
+  project_id: string;
+  volume_number: number;
+  title: string;
+  description?: string | null;
+  chapter_start: number;
+  chapter_end?: number | null;
+  highlight_rhythm?: string | null;
+  emotion_arc?: string | null;
+  foreshadowing_notes?: string | null;
+  twists?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VolumeCreate {
+  volume_number?: number;
+  title: string;
+  description?: string | null;
+  chapter_start?: number;
+  chapter_end?: number | null;
+  highlight_rhythm?: string | null;
+  emotion_arc?: string | null;
+  foreshadowing_notes?: string | null;
+  twists?: string | null;
+}
+
+export type VolumeUpdate = Partial<VolumeCreate>;
+
+export const volumeApi = {
+  list: (projectId: string) =>
+    api.get<Volume[]>(`/projects/${projectId}/volumes`),
+  create: (projectId: string, data: VolumeCreate) =>
+    api.post<Volume>(`/projects/${projectId}/volumes`, data),
+  update: (projectId: string, volumeId: string, data: VolumeUpdate) =>
+    api.put<Volume>(`/projects/${projectId}/volumes/${volumeId}`, data),
+  delete: (projectId: string, volumeId: string) =>
+    api.delete(`/projects/${projectId}/volumes/${volumeId}`),
 };
 
 // === Foreshadowing ===

@@ -14,6 +14,7 @@ class Chapter(Base):
     title = Column(String(255), nullable=False)
     content = Column(JSON, nullable=True)
     summary = Column(String(1000), nullable=True)
+    outline_detail = Column(JSON, nullable=True)
     word_count = Column(Integer, default=0)
     status = Column(String(50), nullable=False, default="draft")
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -9,6 +9,7 @@ class ChapterCreate(BaseModel):
     title: str
     content: Optional[Any] = None
     summary: Optional[str] = None
+    outline_detail: Optional[Any] = None
     word_count: int = 0
     status: str = "draft"
 
@@ -17,6 +18,7 @@ class ChapterUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[Any] = None
     summary: Optional[str] = None
+    outline_detail: Optional[Any] = None
     word_count: Optional[int] = None
     status: Optional[str] = None
 
@@ -28,6 +30,7 @@ class ChapterResponse(BaseModel):
     title: str
     content: Optional[Any] = None
     summary: Optional[str] = None
+    outline_detail: Optional[Any] = None
     word_count: int
     status: str
     created_at: datetime

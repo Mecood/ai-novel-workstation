@@ -28,6 +28,7 @@ async def create_chapter(
         title=data.title,
         content=data.content,
         summary=data.summary,
+        outline_detail=data.outline_detail,
         word_count=data.word_count,
         status=data.status,
     )
