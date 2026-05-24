@@ -84,7 +84,9 @@ class VectorSearchService:
         chunks = self._chunk_text(content)
 
         for i, chunk in enumerate(chunks):
-            chunk_id = hashlib.md5(f"{metadata.get('chapter', 0)}_{i}_{len(chunks)}".encode()).hexdigest()
+            # 使用 metadata + 内容 hash 确保 chunk_id 全局唯一
+            meta_str = str(sorted(metadata.items()))
+            chunk_id = hashlib.md5(f"{project_id}_{meta_str}_{i}_{len(chunks)}_{chunk[:20]}".encode()).hexdigest()
             embedding = await ai_client.embed(chunk)
 
             collection.add(
