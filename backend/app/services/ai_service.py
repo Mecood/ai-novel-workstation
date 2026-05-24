@@ -104,8 +104,9 @@ class AIService:
         self, db: AsyncSession, project: Project, chapter_number: int,
         story_core: str, worldview: str, characters: list[Character],
         previous_chapters: list[Chapter],
+        vector_context: str = "",
     ) -> AsyncGenerator[str, None]:
-        """Stream chapter generation."""
+        """Stream chapter generation with optional vector context."""
         prompt = self._load_prompt("chapter")
 
         char_summary = "\n".join([
@@ -120,6 +121,11 @@ class AIService:
                 for c in previous_chapters[-3:]  # Last 3 chapters context
             ])
 
+        # 将向量检索结果拼入 prompt 作为额外上下文
+        extra_context = ""
+        if vector_context:
+            extra_context = f"\n\n### 相关历史内容（向量检索）\n以下是与本章相关的历史情节片段：\n{vector_context}"
+
         messages = [
             {"role": "system", "content": prompt["system"]},
             {"role": "user", "content": prompt["user"].format(
@@ -130,6 +136,7 @@ class AIService:
                 characters=char_summary,
                 chapter_number=chapter_number,
                 prev_summary=prev_summary,
+                extra_context=extra_context,
             )},
         ]
 

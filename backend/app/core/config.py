@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+import os
 
 
 class Settings(BaseSettings):
@@ -12,6 +13,11 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 1024
     SILICONFLOW_API_KEY: Optional[str] = None
     DEEPSEEK_API_KEY: Optional[str] = None
+    STORAGE_DIR: str = "./storage"
+
+    @property
+    def storage_path(self) -> str:
+        return os.path.join(self.STORAGE_DIR, "vectorstore")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

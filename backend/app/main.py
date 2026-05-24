@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.v1 import projects, worldviews, characters, chapters, foreshadowings, generation, knowledges, settings as settings_router, story_core, volumes, prompt_templates
+from app.api.v1 import projects, worldviews, characters, chapters, foreshadowings, generation, knowledges, settings as settings_router, story_core, volumes, prompt_templates, search
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.include_router(generation.router, prefix=settings.API_PREFIX)
 app.include_router(story_core.router, prefix=settings.API_PREFIX)
 app.include_router(volumes.router, prefix=settings.API_PREFIX)
 app.include_router(prompt_templates.router, prefix=settings.API_PREFIX)
+app.include_router(search.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health")
