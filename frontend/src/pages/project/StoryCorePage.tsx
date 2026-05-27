@@ -57,12 +57,23 @@ export default function StoryCorePage() {
     setGenerating(true);
     try {
       const { data } = await storyCoreApi.generate(id);
-      const parsed = data?.parsed || {};
+      const rawContent: string = data?.content || '';
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(rawContent);
+      } catch {
+        parsed = { theme: rawContent };
+      }
       const newCore: StoryCoreData = {
+        ...parsed,
         core_conflict: parsed.core_conflict || '',
         theme: parsed.theme || '',
-        innovation: parsed.innovation || '',
-        one_sentence: parsed.one_sentence || '',
+        innovation:
+          parsed.innovation ||
+          (Array.isArray(parsed.highlights)
+            ? parsed.highlights.join('\n')
+            : parsed.highlights || ''),
+        one_sentence: parsed.one_sentence || parsed.summary || '',
         versions: parsed.versions || [],
       };
       setStoryCore(newCore);

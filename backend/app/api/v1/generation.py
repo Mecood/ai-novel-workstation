@@ -60,6 +60,40 @@ async def generate_worldview(
     story_core_text = json.dumps(project.story_core, ensure_ascii=False)
     content = await ai_service.generate_worldview(db, project, story_core_text)
 
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        parsed = {"description": content}
+
+    name = parsed.get("name") or f"{project.name or '项目'}的世界观"
+    description = (
+        parsed.get("description")
+        or parsed.get("overview")
+        or "暂无描述"
+    )
+    rules = parsed.get("rules") or []
+    timeline = parsed.get("timeline") or []
+
+    result = await db.execute(
+        select(Worldview).where(Worldview.project_id == project_id)
+    )
+    worldview = result.scalar_one_or_none()
+    if worldview:
+        worldview.name = name
+        worldview.description = description
+        worldview.rules = rules
+        worldview.timeline = timeline
+    else:
+        worldview = Worldview(
+            project_id=project_id,
+            name=name,
+            description=description,
+            rules=rules,
+            timeline=timeline,
+        )
+        db.add(worldview)
+    await db.commit()
+
     return {"content": content}
 
 
