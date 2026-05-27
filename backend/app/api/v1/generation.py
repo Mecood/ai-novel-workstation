@@ -118,6 +118,42 @@ async def generate_characters(
 
     content = await ai_service.generate_characters(db, project, story_core_text, worldview_text)
 
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        parsed = []
+
+    if not isinstance(parsed, list):
+        parsed = []
+
+    result = await db.execute(
+        select(Character).where(Character.project_id == project_id)
+    )
+    for old in result.scalars().all():
+        await db.delete(old)
+
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or "未命名角色"
+        role_type = item.get("role_type") or "supporting"
+        personality = item.get("personality")
+        background = item.get("background")
+        appearance = item.get("appearance")
+        relationships = item.get("relationships")
+        arc = item.get("arc")
+        db.add(Character(
+            project_id=project_id,
+            name=name,
+            role_type=role_type,
+            personality=personality,
+            background=background,
+            appearance=appearance,
+            relationships=relationships,
+            arc=arc,
+        ))
+    await db.commit()
+
     return {"content": content}
 
 
