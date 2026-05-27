@@ -1,11 +1,55 @@
-import axios from 'axios';
-
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/v1';
 
-const api = axios.create({
-  baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' },
-});
+// ---- Fetch wrapper (replaces axios) ----
+// Returns { data: T } to match the old axios response shape used by all components.
+
+interface ApiResponse<T> {
+  data: T;
+}
+
+function buildUrl(path: string, params?: Record<string, any>): string {
+  const url = `${API_BASE}${path}`;
+  if (!params) return url;
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null);
+  if (entries.length === 0) return url;
+  const qs = new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString();
+  return `${url}?${qs}`;
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  params?: Record<string, any>,
+): Promise<ApiResponse<T>> {
+  const url = buildUrl(path, params);
+  const init: RequestInit = { method };
+  // Only set Content-Type for requests with a body (POST/PUT/PATCH)
+  // Setting it on GET triggers a CORS preflight that Vite proxy can't handle
+  if (body !== undefined) {
+    init.headers = { 'Content-Type': 'application/json' };
+    init.body = JSON.stringify(body);
+  }
+  const resp = await fetch(url, init);
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status}: ${text}`);
+  }
+  const data = (await resp.json()) as T;
+  return { data };
+}
+
+// Convenience helpers so the call-site stays compact: api.get<T>(path, opts)
+const api = {
+  get: <T>(path: string, opts?: { params?: Record<string, any> }) =>
+    request<T>('GET', path, undefined, opts?.params),
+  post: <T>(path: string, body?: unknown) =>
+    request<T>('POST', path, body),
+  put: <T>(path: string, body?: unknown) =>
+    request<T>('PUT', path, body),
+  delete: <T = void>(path: string) =>
+    request<T>('DELETE', path),
+};
 
 // === Project ===
 export interface Project {
@@ -121,7 +165,7 @@ export const chapterApi = {
   previousSummary: (projectId: string, currentChapter?: number) =>
     api.get<{ summary: string | null; chapter_count: number }>(
       `/projects/${projectId}/chapters/previous-summary`,
-      { params: currentChapter ? { current_chapter: currentChapter } : {} }
+      { params: currentChapter ? { current_chapter: currentChapter } : undefined }
     ),
   regenerate: (projectId: string, chapterId: string, onChunk: (text: string) => void) => {
     return fetch(`${API_BASE}/projects/${projectId}/chapters/${chapterId}/regenerate`, {
@@ -253,7 +297,7 @@ export interface KnowledgeCreate {
 export const knowledgeApi = {
   list: (projectId: string, category?: string) =>
     api.get<Knowledge[]>(`/projects/${projectId}/knowledges`, {
-      params: category ? { category } : {},
+      params: category ? { category } : undefined,
     }),
   create: (projectId: string, data: KnowledgeCreate) =>
     api.post<Knowledge>(`/projects/${projectId}/knowledges`, data),
