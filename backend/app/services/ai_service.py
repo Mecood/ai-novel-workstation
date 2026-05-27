@@ -27,14 +27,17 @@ class AIService:
         app_config = result.scalar_one_or_none()
         config = (app_config.config if app_config else None) or {}
 
-        active_name = config.get("active_provider")
+        active_idx = config.get("active_provider")
         providers = config.get("providers") or []
-        if not active_name or not providers:
+        if active_idx is None or not providers:
             raise HTTPException(400, "未配置 AI 提供商，请前往设置页面添加并选中一个提供商")
 
-        provider = next((p for p in providers if p.get("name") == active_name), None)
+        if isinstance(active_idx, int):
+            provider = providers[active_idx] if 0 <= active_idx < len(providers) else None
+        else:
+            provider = next((p for p in providers if p.get("name") == active_idx), None)
         if not provider:
-            raise HTTPException(400, f"未找到激活的 AI 提供商：{active_name}")
+            raise HTTPException(400, f"未找到激活的 AI 提供商：{active_idx}")
 
         url = provider.get("url")
         api_key = provider.get("api_key")
