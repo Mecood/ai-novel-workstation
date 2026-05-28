@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sse_starlette.sse import EventSourceResponse
 
 from app.core.database import get_db
@@ -135,11 +135,7 @@ async def generate_characters(
     if not isinstance(parsed, list):
         parsed = []
 
-    result = await db.execute(
-        select(Character).where(Character.project_id == project_id)
-    )
-    for old in result.scalars().all():
-        await db.delete(old)
+    await db.execute(delete(Character).where(Character.project_id == project_id))
 
     for item in parsed:
         if not isinstance(item, dict):

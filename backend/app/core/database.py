@@ -26,7 +26,9 @@ class GUID(TypeDecorator):
     def process_result_value(self, value, dialect):
         if value is None:
             return value
-        return str(value)
+        if dialect.name == "postgresql":
+            return value  # PostgreSQL driver returns UUID natively
+        return str(value)  # SQLite stores as string
 
 # Switch to SQLite if the URL is postgresql (for local dev without Docker)
 _db_url = settings.DATABASE_URL
