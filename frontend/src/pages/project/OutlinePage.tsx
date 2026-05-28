@@ -20,6 +20,9 @@ import {
   Col,
   Divider,
   Alert,
+  Switch,
+  Segmented,
+  Tree,
 } from 'antd';
 import {
   OrderedListOutlined,
@@ -29,6 +32,10 @@ import {
   ThunderboltOutlined,
   DeleteOutlined,
   BookOutlined,
+  LockOutlined,
+  UnlockOutlined,
+  AppstoreOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import { chapterApi, volumeApi, foreshadowingApi, aiApi } from '../../services/api';
@@ -96,12 +103,13 @@ export default function OutlinePage() {
   const [chapters, setChapters] = useState<ChapterDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [generatingOutline, setGeneratingOutline] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm] = Form.useForm();
   const [activeKeys, setActiveKeys] = useState<string[]>([]);
   const [unresolvedCount, setUnresolvedCount] = useState(0);
   const [unresolvedOverdue, setUnresolvedOverdue] = useState(0);
+  const [editMode, setEditMode] = useState(false);
+  const [viewMode, setViewMode] = useState<'form' | 'tree'>('form');
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -162,6 +170,27 @@ export default function OutlinePage() {
       });
     });
   }, [volumes, chapters]);
+
+  const treeData = useMemo(() => {
+    return volumes.map((v) => {
+      const list = chaptersByVolume.get(v.id) || [];
+      const start = v.draftChapterStart ?? 1;
+      const end = v.draftChapterEnd ?? (list.length > 0 ? list[list.length - 1].chapter_number : start);
+      const rangeLabel = v.draftChapterEnd != null ? `第${start}-${end}章` : `第${start}章起`;
+      return {
+        key: `vol-${v.id}`,
+        title: `卷${v.volume_number}：${v.draftTitle || '未命名'}（${rangeLabel}）`,
+        children: list.map((c) => {
+          const summarySnip = (c.draftSummary || '').slice(0, 50);
+          return {
+            key: `ch-${c.id}`,
+            title: `第${c.chapter_number}章 ${c.title || '未命名'}${summarySnip ? ` — ${summarySnip}` : ''}`,
+            isLeaf: true,
+          };
+        }),
+      };
+    });
+  }, [volumes, chaptersByVolume]);
 
   const updateVolumeField = <K extends keyof VolumeDraft>(
     volumeId: string,
@@ -280,6 +309,7 @@ export default function OutlinePage() {
           placeholder="本章简介 / 摘要"
           autoSize={{ minRows: 2, maxRows: 4 }}
           style={{ marginBottom: 8 }}
+          readOnly={!editMode}
         />
         <Row gutter={[12, 8]}>
           <Col xs={24} md={12}>
@@ -289,6 +319,7 @@ export default function OutlinePage() {
               onChange={(e) => updateChapterField(chapter.id, 'draftEvents', e.target.value)}
               placeholder="本章发生的关键事件、场景变化"
               autoSize={{ minRows: 2, maxRows: 5 }}
+              readOnly={!editMode}
             />
           </Col>
           <Col xs={24} md={12}>
@@ -298,6 +329,7 @@ export default function OutlinePage() {
               onChange={(e) => updateChapterField(chapter.id, 'draftHooks', e.target.value)}
               placeholder="章节开篇 / 结尾的钩子"
               autoSize={{ minRows: 2, maxRows: 5 }}
+              readOnly={!editMode}
             />
           </Col>
           <Col xs={24} md={12}>
@@ -307,6 +339,7 @@ export default function OutlinePage() {
               onChange={(e) => updateChapterField(chapter.id, 'draftHighlights', e.target.value)}
               placeholder="情绪高潮 / 爽点设计"
               autoSize={{ minRows: 2, maxRows: 5 }}
+              readOnly={!editMode}
             />
           </Col>
           <Col xs={24} md={12}>
@@ -316,6 +349,7 @@ export default function OutlinePage() {
               onChange={(e) => updateChapterField(chapter.id, 'draftSuspense', e.target.value)}
               placeholder="埋下的悬念 / 未解之谜"
               autoSize={{ minRows: 2, maxRows: 5 }}
+              readOnly={!editMode}
             />
           </Col>
         </Row>
@@ -349,6 +383,7 @@ export default function OutlinePage() {
               value={v.draftTitle}
               onChange={(e) => updateVolumeField(v.id, 'draftTitle', e.target.value)}
               placeholder="本卷标题"
+              readOnly={!editMode}
             />
           </Col>
           <Col xs={12} md={6}>
@@ -357,6 +392,7 @@ export default function OutlinePage() {
               value={v.draftChapterStart}
               min={1}
               style={{ width: '100%' }}
+              disabled={!editMode}
               onChange={(value) =>
                 updateVolumeField(v.id, 'draftChapterStart', Number(value) || 1)
               }
@@ -369,6 +405,7 @@ export default function OutlinePage() {
               min={v.draftChapterStart}
               placeholder="可留空"
               style={{ width: '100%' }}
+              disabled={!editMode}
               onChange={(value) =>
                 updateVolumeField(
                   v.id,
@@ -385,6 +422,7 @@ export default function OutlinePage() {
               onChange={(e) => updateVolumeField(v.id, 'draftDescription', e.target.value)}
               placeholder="本卷的故事主线、核心命题"
               autoSize={{ minRows: 2, maxRows: 5 }}
+              readOnly={!editMode}
             />
           </Col>
           <Col xs={24} md={12}>
@@ -394,6 +432,7 @@ export default function OutlinePage() {
               onChange={(e) => updateVolumeField(v.id, 'draftHighlightRhythm', e.target.value)}
               placeholder="本卷的爽点分布与节奏，例如：第3章打脸 / 第7章拿到新身份"
               autoSize={{ minRows: 3, maxRows: 6 }}
+              readOnly={!editMode}
             />
           </Col>
           <Col xs={24} md={12}>
@@ -403,6 +442,7 @@ export default function OutlinePage() {
               onChange={(e) => updateVolumeField(v.id, 'draftEmotionArc', e.target.value)}
               placeholder="本卷情绪起伏：压抑→爆发→反思……"
               autoSize={{ minRows: 3, maxRows: 6 }}
+              readOnly={!editMode}
             />
           </Col>
           <Col xs={24} md={12}>
@@ -414,6 +454,7 @@ export default function OutlinePage() {
               }
               placeholder="本卷埋设的伏笔、需要在后续卷回收的细节"
               autoSize={{ minRows: 3, maxRows: 6 }}
+              readOnly={!editMode}
             />
           </Col>
           <Col xs={24} md={12}>
@@ -423,6 +464,7 @@ export default function OutlinePage() {
               onChange={(e) => updateVolumeField(v.id, 'draftTwists', e.target.value)}
               placeholder="关键反转、身份揭示、立场反转"
               autoSize={{ minRows: 3, maxRows: 6 }}
+              readOnly={!editMode}
             />
           </Col>
         </Row>
@@ -467,29 +509,32 @@ export default function OutlinePage() {
           </Paragraph>
         </div>
         <Space wrap>
+          <Segmented
+            value={viewMode}
+            onChange={(val) => setViewMode(val as 'form' | 'tree')}
+            options={[
+              { label: <span><AppstoreOutlined /> 表单</span>, value: 'form' },
+              { label: <span><UnorderedListOutlined /> 树状图</span>, value: 'tree' },
+            ]}
+          />
+          <Space size={4}>
+            {editMode ? <UnlockOutlined style={{ color: '#52c41a' }} /> : <LockOutlined style={{ color: '#999' }} />}
+            <Switch
+              checked={editMode}
+              onChange={setEditMode}
+              checkedChildren="编辑"
+              unCheckedChildren="只读"
+            />
+          </Space>
           <Button icon={<ReloadOutlined />} onClick={fetchData} disabled={loading}>
             刷新
           </Button>
-          <Button icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+          <Button icon={<PlusOutlined />} onClick={() => setCreateOpen(true)} disabled={!editMode}>
             添加卷
           </Button>
           <Button
             icon={<ThunderboltOutlined />}
-            onClick={async () => {
-              setGeneratingOutline(true);
-              const hide = message.loading('AI 正在生成大纲...', 0);
-              try {
-                const { data } = await aiApi.generateOutline(id!);
-                message.success(`大纲生成完成！共 ${data.volumes_created} 卷、${data.chapters_created} 章`);
-                await fetchData();
-              } catch (err: any) {
-                message.error(err?.message || '大纲生成失败');
-              } finally {
-                hide();
-                setGeneratingOutline(false);
-              }
-            }}
-            loading={generatingOutline}
+            onClick={() => message.info('AI 生成大纲功能即将上线')}
           >
             AI 生成大纲
           </Button>
@@ -498,7 +543,7 @@ export default function OutlinePage() {
             icon={<SaveOutlined />}
             onClick={handleSaveAll}
             loading={saving}
-            disabled={loading}
+            disabled={loading || !editMode}
           >
             保存全部
           </Button>
@@ -536,6 +581,18 @@ export default function OutlinePage() {
             description="暂无卷与章节，点击「添加卷」开始规划，或到「写作工作区」生成章节"
           />
         </Card>
+      ) : viewMode === 'tree' ? (
+        <Card>
+          {treeData.length === 0 ? (
+            <Empty description="暂无卷数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <Tree
+              treeData={treeData}
+              defaultExpandAll
+              showLine={{ showLeafIcon: false }}
+            />
+          )}
+        </Card>
       ) : (
         <>
           {volumes.length === 0 ? (
@@ -554,7 +611,7 @@ export default function OutlinePage() {
               items={volumes.map((v) => ({
                 key: v.id,
                 label: volumeHeader(v),
-                extra: (
+                extra: editMode ? (
                   <Popconfirm
                     title="确定删除该卷？"
                     description="只删除卷信息，不会删除章节"
@@ -572,7 +629,7 @@ export default function OutlinePage() {
                       danger
                     />
                   </Popconfirm>
-                ),
+                ) : null,
                 children: renderVolumeBody(v),
               }))}
               style={{ background: 'transparent' }}

@@ -287,6 +287,9 @@ export interface Knowledge {
   content: string;
   category: string;
   tags: string[];
+  source: string;
+  source_type?: string;
+  source_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -296,6 +299,9 @@ export interface KnowledgeCreate {
   content?: string;
   category?: string;
   tags?: string[];
+  source?: string;
+  source_type?: string;
+  source_id?: string;
 }
 
 export const knowledgeApi = {

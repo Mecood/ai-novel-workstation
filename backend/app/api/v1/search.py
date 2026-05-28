@@ -92,7 +92,7 @@ async def index_content(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Index story content into vector store."""
-    valid_types = {"chapters", "worldview", "characters"}
+    valid_types = {"chapters", "worldview", "characters", "knowledge"}
     if content_type not in valid_types:
         raise HTTPException(400, f"Invalid content type, must be one of: {valid_types}")
 
@@ -149,6 +149,22 @@ async def index_content(
                     ai_client=client,
                 )
                 indexed += 1
+
+        elif content_type == "knowledge":
+            from app.models.knowledge import Knowledge
+            result = await db.execute(
+                select(Knowledge).where(Knowledge.project_id == project_id)
+            )
+            knowledges = list(result.scalars().all())
+            for kn in knowledges:
+                content = kn.content if isinstance(kn.content, str) else str(kn.content or "")
+                if content:
+                    await vector_service.add_content(
+                        project_id, content,
+                        {"chapter": 0, "title": kn.title, "type": "knowledge", "category": kn.category, "source": kn.source},
+                        ai_client=client,
+                    )
+                    indexed += 1
 
         return {"indexed": indexed, "content_type": content_type}
 

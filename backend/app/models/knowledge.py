@@ -14,5 +14,8 @@ class Knowledge(Base):
     content = Column(Text, nullable=True)
     category = Column(String(100), nullable=False, default="general")
     tags = Column(JSON, nullable=True, default=list)
+    source = Column(String(20), nullable=False, default="manual")  # manual / auto
+    source_type = Column(String(50), nullable=True)  # worldview / character / chapter / story_core
+    source_id = Column(GUID, nullable=True)  # 关联的实体ID
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

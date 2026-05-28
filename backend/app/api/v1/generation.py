@@ -16,6 +16,7 @@ from app.models.worldview import Worldview
 from app.models.character import Character
 from app.models.chapter import Chapter
 from app.models.volume import Volume
+from app.models.knowledge import Knowledge
 from app.services.ai_service import AIService
 from app.services.vector_search import VectorSearchService
 
@@ -25,6 +26,31 @@ vector_service = VectorSearchService(
     persist_dir=settings.storage_path,
     siliconflow_api_key=settings.SILICONFLOW_API_KEY or "",
 )
+
+
+async def _save_knowledge(
+    db: AsyncSession,
+    project_id: str,
+    items: list[dict],
+    source_type: str,
+    source_id: str | None = None,
+):
+    """Save extracted knowledge items to database."""
+    for item in items:
+        if not item.get("title") or not item.get("content"):
+            continue
+        kn = Knowledge(
+            project_id=project_id,
+            title=item["title"],
+            content=item["content"],
+            category=item.get("category", "general"),
+            tags=item.get("tags", []),
+            source="auto",
+            source_type=source_type,
+            source_id=source_id,
+        )
+        db.add(kn)
+    await db.commit()
 
 
 def _extract_json(text: str):
@@ -114,6 +140,13 @@ async def generate_worldview(
         db.add(worldview)
     await db.commit()
 
+    # Auto-extract knowledge from worldview
+    try:
+        kn_items = await ai_service.extract_knowledge(db, content, "世界观设定")
+        await _save_knowledge(db, project_id, kn_items, "worldview", str(worldview.id))
+    except Exception:
+        pass  # Don't fail generation if knowledge extraction fails
+
     return {"content": content}
 
 
@@ -169,6 +202,13 @@ async def generate_characters(
             arc=arc,
         ))
     await db.commit()
+
+    # Auto-extract knowledge from characters
+    try:
+        kn_items = await ai_service.extract_knowledge(db, content, "角色设定")
+        await _save_knowledge(db, project_id, kn_items, "character")
+    except Exception:
+        pass
 
     return {"content": content}
 
@@ -256,6 +296,13 @@ async def generate_chapter(
         )
         db.add(chapter)
         await db.commit()
+
+        # Auto-extract knowledge from chapter content
+        try:
+            kn_items = await ai_service.extract_knowledge(db, full_content, "章节内容")
+            await _save_knowledge(db, project_id, kn_items, "chapter", str(chapter.id))
+        except Exception:
+            pass
 
         yield {"data": json.dumps({
             "type": "done",
@@ -494,6 +541,13 @@ async def regenerate_chapter(
         chapter.content = {"text": full_content}
         chapter.word_count = len(full_content)
         await db.commit()
+
+        # Auto-extract knowledge from regenerated chapter
+        try:
+            kn_items = await ai_service.extract_knowledge(db, full_content, "章节内容")
+            await _save_knowledge(db, project_id, kn_items, "chapter", str(chapter_id))
+        except Exception:
+            pass
 
         yield {"data": json.dumps({
             "type": "done",

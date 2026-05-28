@@ -9,6 +9,9 @@ class KnowledgeCreate(BaseModel):
     content: Optional[str] = ""
     category: str = "general"
     tags: Optional[List[str]] = []
+    source: str = "manual"
+    source_type: Optional[str] = None
+    source_id: Optional[UUID] = None
 
 
 class KnowledgeUpdate(BaseModel):
@@ -25,6 +28,9 @@ class KnowledgeResponse(BaseModel):
     content: Optional[str] = None
     category: str
     tags: Optional[List[str]] = []
+    source: str = "manual"
+    source_type: Optional[str] = None
+    source_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
 

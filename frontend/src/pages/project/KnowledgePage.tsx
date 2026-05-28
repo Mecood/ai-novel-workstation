@@ -14,7 +14,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { BookOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { BookOutlined, DeleteOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
@@ -48,6 +48,18 @@ const CATEGORY_META: Record<string, { label: string; color: string }> = CATEGORY
 function getCategoryMeta(category?: string) {
   if (category && CATEGORY_META[category]) return CATEGORY_META[category];
   return { label: category || '通用', color: 'default' };
+}
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  worldview: '世界观',
+  character: '角色',
+  chapter: '章节',
+  story_core: '故事核心',
+};
+
+function getSourceTypeLabel(sourceType?: string): string {
+  if (sourceType && SOURCE_TYPE_LABELS[sourceType]) return SOURCE_TYPE_LABELS[sourceType];
+  return sourceType || '';
 }
 
 function truncate(text: string, max = 120) {
@@ -245,31 +257,42 @@ export default function KnowledgePage() {
                 <Text strong style={{ fontSize: 16, flex: 1, lineHeight: 1.4 }}>
                   {item.title}
                 </Text>
-                <Popconfirm
-                  title="确认删除？"
-                  onConfirm={(e) => {
-                    e?.stopPropagation();
-                    handleDelete(item);
-                  }}
-                  onCancel={(e) => e?.stopPropagation()}
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true }}
-                >
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    icon={<DeleteOutlined />}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </Popconfirm>
+                {item.source !== 'auto' && (
+                  <Popconfirm
+                    title="确认删除？"
+                    onConfirm={(e) => {
+                      e?.stopPropagation();
+                      handleDelete(item);
+                    }}
+                    onCancel={(e) => e?.stopPropagation()}
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button
+                      type="text"
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </Popconfirm>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 <Tag color={meta.color} style={{ margin: 0 }}>
                   {meta.label}
                 </Tag>
+                {item.source === 'auto' && (
+                  <Tag
+                    color="cyan"
+                    icon={<RobotOutlined />}
+                    style={{ margin: 0 }}
+                  >
+                    自动·{getSourceTypeLabel(item.source_type)}
+                  </Tag>
+                )}
                 {(item.tags || []).map((t) => (
                   <Tag key={t} style={{ margin: 0, fontSize: 12 }}>
                     {t}

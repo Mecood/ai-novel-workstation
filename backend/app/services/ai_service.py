@@ -223,6 +223,34 @@ class AIService:
         finally:
             await client.close()
 
+    async def extract_knowledge(
+        self, db: AsyncSession, content: str, source_type: str
+    ) -> list[dict]:
+        """Extract knowledge items from content using AI."""
+        prompt = self._load_prompt("knowledge_extract")
+        messages = [
+            {"role": "system", "content": prompt["system"]},
+            {
+                "role": "user",
+                "content": prompt["user"].format(
+                    source_type=source_type,
+                    content=content[:3000],  # Limit content length
+                ),
+            },
+        ]
+        client = await self._build_client(db)
+        try:
+            result = str(await client.chat(messages, temperature=0.3, max_tokens=2000))
+            import re
+            match = re.search(r'\[.*\]', result, re.DOTALL)
+            if match:
+                return json.loads(match.group())
+            return []
+        except Exception:
+            return []
+        finally:
+            await client.close()
+
     def _load_prompt(self, name: str) -> dict:
         """Load prompt template from YAML file."""
         path = self.PROMPT_DIR / f"{name}.yaml"
