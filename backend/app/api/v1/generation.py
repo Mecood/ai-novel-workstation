@@ -1,5 +1,6 @@
 """AI generation API routes with SSE streaming."""
 import json
+import re
 from typing import Annotated
 from uuid import UUID
 
@@ -25,6 +26,14 @@ vector_service = VectorSearchService(
 )
 
 
+def _extract_json(text: str):
+    """Extract JSON from AI response, stripping markdown code fences if present."""
+    # Strip ```json ... ``` or ``` ... ```
+    cleaned = re.sub(r'^```(?:json)?\s*\n?', '', text.strip())
+    cleaned = re.sub(r'\n?```\s*$', '', cleaned.strip())
+    return json.loads(cleaned)
+
+
 @router.post("/story-core/generate")
 async def generate_story_core(
     project_id: str,
@@ -39,7 +48,7 @@ async def generate_story_core(
 
     # Update project with story core
     try:
-        project.story_core = json.loads(content)
+        project.story_core = _extract_json(content)
     except json.JSONDecodeError:
         project.story_core = {"raw": content}
     await db.commit()
@@ -61,8 +70,8 @@ async def generate_worldview(
     content = await ai_service.generate_worldview(db, project, story_core_text)
 
     try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
+        parsed = _extract_json(content)
+    except (json.JSONDecodeError, ValueError):
         parsed = {"description": content}
 
     name = parsed.get("name") or f"{project.name or '项目'}的世界观"
@@ -119,8 +128,8 @@ async def generate_characters(
     content = await ai_service.generate_characters(db, project, story_core_text, worldview_text)
 
     try:
-        parsed = json.loads(content)
-    except json.JSONDecodeError:
+        parsed = _extract_json(content)
+    except (json.JSONDecodeError, ValueError):
         parsed = []
 
     if not isinstance(parsed, list):
