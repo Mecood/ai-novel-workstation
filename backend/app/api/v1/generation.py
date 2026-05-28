@@ -15,6 +15,7 @@ from app.models.project import Project
 from app.models.worldview import Worldview
 from app.models.character import Character
 from app.models.chapter import Chapter
+from app.models.volume import Volume
 from app.services.ai_service import AIService
 from app.services.vector_search import VectorSearchService
 
@@ -28,9 +29,19 @@ vector_service = VectorSearchService(
 
 def _extract_json(text: str):
     """Extract JSON from AI response, stripping markdown code fences if present."""
+    # Try parsing the raw text first
+    try:
+        return json.loads(text.strip())
+    except json.JSONDecodeError:
+        pass
     # Strip ```json ... ``` or ``` ... ```
     cleaned = re.sub(r'^```(?:json)?\s*\n?', '', text.strip())
     cleaned = re.sub(r'\n?```\s*$', '', cleaned.strip())
+    # Try to find JSON object in case there's extra text before/after
+    brace_start = cleaned.find('{')
+    brace_end = cleaned.rfind('}')
+    if brace_start != -1 and brace_end != -1 and brace_end > brace_start:
+        cleaned = cleaned[brace_start:brace_end + 1]
     return json.loads(cleaned)
 
 
@@ -219,27 +230,155 @@ async def generate_chapter(
             worldview_text, characters, chapters, vector_context,
         ):
             full_content += chunk
-            yield {"event": "chunk", "data": chunk}
+            yield {"data": json.dumps({"type": "chunk", "text": chunk})}
+
+        # Generate title and summary from the content
+        title = f"第{next_number}章"
+        summary = ""
+        try:
+            meta = await ai_service.generate_chapter_meta(db, full_content, next_number)
+            if meta.get("title"):
+                title = meta["title"]
+            if meta.get("summary"):
+                summary = meta["summary"]
+        except Exception:
+            pass  # Fallback to default title
 
         # Save chapter to database
         chapter = Chapter(
             project_id=project_id,
             chapter_number=next_number,
-            title=f"第{next_number}章",
+            title=title,
             content={"text": full_content},
-            summary="",
+            summary=summary,
             word_count=len(full_content),
             status="generated",
         )
         db.add(chapter)
         await db.commit()
 
-        yield {"event": "done", "data": json.dumps({
+        yield {"data": json.dumps({
+            "type": "done",
+            "chapter_id": str(chapter.id),
             "chapter_number": next_number,
+            "title": title,
             "word_count": len(full_content),
         })}
 
     return EventSourceResponse(event_generator())
+
+
+@router.post("/outline/generate")
+async def generate_outline(
+    project_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """AI generate a full outline (volumes + chapter outlines)."""
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    # Get worldview
+    result = await db.execute(
+        select(Worldview).where(Worldview.project_id == project_id)
+    )
+    worldview = result.scalar_one_or_none()
+
+    # Get characters
+    result = await db.execute(
+        select(Character).where(Character.project_id == project_id)
+    )
+    characters = list(result.scalars().all())
+
+    story_core_text = json.dumps(project.story_core, ensure_ascii=False) if project.story_core else ""
+    worldview_text = worldview.description if worldview else "暂无世界观设定"
+
+    content = await ai_service.generate_outline(
+        db, project, story_core_text, worldview_text, characters
+    )
+
+    # Parse and save
+    try:
+        parsed = _extract_json(content)
+    except (json.JSONDecodeError, ValueError) as e:
+        raise HTTPException(
+            422,
+            f"AI 返回的大纲 JSON 解析失败（可能是内容截断），请重试。错误：{e}"
+        )
+
+    volumes_data = parsed.get("volumes", [])
+    if not volumes_data:
+        raise HTTPException(
+            422,
+            "AI 返回的大纲没有包含卷信息，请重试。原始内容：" + content[:500]
+        )
+
+    # Clear existing volumes and chapters
+    existing_volumes = await db.execute(
+        select(Volume).where(Volume.project_id == project_id)
+    )
+    for v in existing_volumes.scalars().all():
+        await db.delete(v)
+
+    existing_chapters = await db.execute(
+        select(Chapter).where(Chapter.project_id == project_id)
+    )
+    for c in existing_chapters.scalars().all():
+        await db.delete(c)
+
+    chapters_created = 0
+    for vol_idx, vol_data in enumerate(volumes_data, 1):
+        title = vol_data.get("title") or f"第{vol_idx}卷"
+        description = vol_data.get("description") or ""
+        highlight_rhythm = vol_data.get("highlight_rhythm")
+        emotion_arc = vol_data.get("emotion_arc")
+        foreshadowing_notes = vol_data.get("foreshadowing_notes")
+        twists = vol_data.get("twists")
+
+        volume = Volume(
+            project_id=project_id,
+            volume_number=vol_idx,
+            title=title,
+            description=description,
+            chapter_start=chapters_created + 1,
+            highlight_rhythm=highlight_rhythm,
+            emotion_arc=emotion_arc,
+            foreshadowing_notes=foreshadowing_notes,
+            twists=twists,
+        )
+        db.add(volume)
+        await db.flush()
+
+        chapter_data = vol_data.get("chapters", [])
+        for ch_idx, ch_data in enumerate(chapter_data, 1):
+            ch_title = ch_data.get("title") or f"第{ch_idx}章"
+            chapter = Chapter(
+                project_id=project_id,
+                chapter_number=chapters_created + 1,
+                title=ch_title,
+                content={"text": ""},
+                summary="",
+                outline_detail={
+                    "events": ch_data.get("events", ""),
+                    "hooks": ch_data.get("hooks", ""),
+                    "highlights": ch_data.get("highlights", ""),
+                    "suspense": ch_data.get("suspense", ""),
+                },
+                status="outlined",
+            )
+            db.add(chapter)
+            chapters_created += 1
+
+        # Update volume end
+        volume.chapter_end = chapters_created
+
+    await db.commit()
+
+    return {
+        "content": content,
+        "volumes_created": len(volumes_data),
+        "chapters_created": chapters_created,
+    }
 
 
 @router.post("/consistency/check")
@@ -349,14 +488,15 @@ async def regenerate_chapter(
             worldview_text, characters, other_chapters,
         ):
             full_content += chunk
-            yield {"event": "chunk", "data": chunk}
+            yield {"data": json.dumps({"type": "chunk", "text": chunk})}
 
         # Update chapter content in place
         chapter.content = {"text": full_content}
         chapter.word_count = len(full_content)
         await db.commit()
 
-        yield {"event": "done", "data": json.dumps({
+        yield {"data": json.dumps({
+            "type": "done",
             "chapter_id": str(chapter_id),
             "chapter_number": target_number,
             "word_count": len(full_content),

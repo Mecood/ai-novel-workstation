@@ -8,9 +8,9 @@ import { aiApi } from '../../services/api';
 const { Title, Text } = Typography;
 
 interface ConsistencyIssue {
-  type: string;
+  severity: string;
   description: string;
-  related_entity?: string;
+  suggestion?: string;
 }
 
 interface ConsistencyResult {
@@ -18,9 +18,10 @@ interface ConsistencyResult {
 }
 
 const typeColorMap: Record<string, string> = {
-  '避坑': 'red',
-  '提醒': 'orange',
-  '建议': 'blue',
+  'S1': 'red',
+  'S2': 'orange',
+  'S3': 'blue',
+  'S4': 'purple',
 };
 
 export default function ConsistencyPage() {
@@ -34,7 +35,10 @@ export default function ConsistencyPage() {
     setResult(null);
     try {
       const res = await aiApi.checkConsistency(id);
-      setResult(res.data);
+      const data = typeof res.data.content === 'string' 
+        ? JSON.parse(res.data.content) as ConsistencyResult
+        : res.data.content as ConsistencyResult;
+      setResult(data);
     } catch {
       message.error('一致性检查失败');
     } finally {
@@ -90,9 +94,9 @@ export default function ConsistencyPage() {
                 <List.Item.Meta
                   title={
                     <Space>
-                      <Tag color={typeColorMap[issue.type] || 'default'}>{issue.type}</Tag>
-                      {issue.related_entity && (
-                        <Text type="secondary">{issue.related_entity}</Text>
+                      <Tag color={typeColorMap[issue.severity] || 'default'}>{issue.severity}</Tag>
+                      {issue.suggestion && (
+                        <Text type="secondary">{issue.suggestion}</Text>
                       )}
                     </Space>
                   }

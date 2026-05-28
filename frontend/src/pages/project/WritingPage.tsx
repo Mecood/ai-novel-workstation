@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, Space, Popconfirm, Collapse, Alert } from 'antd';
+import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, Space, Popconfirm, Collapse, Alert, Modal } from 'antd';
 import { EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined, BookOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import { chapterApi, aiApi, foreshadowingApi } from '../../services/api';
@@ -17,6 +17,7 @@ export default function WritingPage() {
   const [regenerating, setRegenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [streamContent, setStreamContent] = useState('');
+  const accumulatedRef = useRef('');
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [editingContent, setEditingContent] = useState('');
   const [previousSummary, setPreviousSummary] = useState<string | null>(null);
@@ -24,6 +25,7 @@ export default function WritingPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [unresolvedCount, setUnresolvedCount] = useState(0);
   const [unresolvedOverdue, setUnresolvedOverdue] = useState(0);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const streamRef = useRef<HTMLDivElement>(null);
 
   const fetchData = useCallback(() => {
@@ -66,10 +68,33 @@ export default function WritingPage() {
     if (!id) return;
     setGenerating(true);
     setStreamContent('');
+    accumulatedRef.current = '';
     try {
-      await aiApi.generateChapter(id, (chunk) => {
-        setStreamContent((prev) => prev + chunk);
-      });
+      await aiApi.generateChapter(
+        id,
+        (chunk) => {
+          accumulatedRef.current += chunk;
+          setStreamContent((prev) => prev + chunk);
+        },
+        (doneData) => {
+          const full = accumulatedRef.current;
+          const newChapter = {
+            id: doneData.chapter_id,
+            project_id: id,
+            chapter_number: doneData.chapter_number,
+            title: doneData.title || `第${doneData.chapter_number}章`,
+            content: { text: full },
+            summary: '',
+            word_count: doneData.word_count || full.length,
+            status: 'generated',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as Chapter;
+          setSelectedChapter(newChapter);
+          setEditingContent(full);
+          setStreamContent('');
+        }
+      );
       message.success('章节生成完成');
       fetchData();
     } catch (err) {
@@ -81,7 +106,15 @@ export default function WritingPage() {
 
   const handleSelectChapter = (ch: Chapter) => {
     setSelectedChapter(ch);
-    const content = typeof ch.content === 'string' ? ch.content : JSON.stringify(ch.content || '');
+    // 提取文本内容，支持 {text: "..."} 格式
+    let content = '';
+    if (typeof ch.content === 'string') {
+      content = ch.content;
+    } else if (ch.content && typeof ch.content === 'object' && 'text' in ch.content) {
+      content = (ch.content as { text?: string }).text || '';
+    } else if (ch.content) {
+      content = JSON.stringify(ch.content);
+    }
     setEditingContent(content);
     fetchPreviousSummary(ch.chapter_number);
   };
@@ -92,7 +125,7 @@ export default function WritingPage() {
     setSaving(true);
     try {
       await chapterApi.update(id, selectedChapter.id, {
-        content,
+        content: { text: content },
         title: selectedChapter.title,
         status: selectedChapter.status,
         word_count: content.length,
@@ -110,20 +143,32 @@ export default function WritingPage() {
     if (!id || !selectedChapter) return;
     setRegenerating(true);
     setStreamContent('');
-    let accumulated = '';
+    accumulatedRef.current = '';
     try {
-      await chapterApi.regenerate(id, selectedChapter.id, (chunk) => {
-        accumulated += chunk;
-        setStreamContent((prev) => prev + chunk);
-      });
-      setEditingContent(accumulated);
+      await chapterApi.regenerate(
+        id,
+        selectedChapter.id,
+        (chunk) => {
+          accumulatedRef.current += chunk;
+          setStreamContent((prev) => prev + chunk);
+        },
+        (doneData) => {
+          const full = accumulatedRef.current;
+          setEditingContent(full);
+          setSelectedChapter({
+            ...selectedChapter,
+            content: { text: full },
+            word_count: doneData.word_count || full.length,
+          });
+          setStreamContent('');
+        }
+      );
       message.success('重新生成完成');
       fetchData();
     } catch (err) {
       message.error('重新生成失败');
     } finally {
       setRegenerating(false);
-      setStreamContent('');
     }
   };
 
@@ -246,7 +291,7 @@ export default function WritingPage() {
                   ]}
                 >
                   <List.Item.Meta
-                    title={<Text strong>第{ch.chapter_number}章 {ch.title}</Text>}
+                    title={<Text strong>{ch.title?.startsWith('第') ? ch.title : `第${ch.chapter_number}章 ${ch.title}`}</Text>}
                     description={
                       <Space>
                         <Tag>{ch.status}</Tag>
@@ -265,19 +310,19 @@ export default function WritingPage() {
           {/* 流式生成区域 */}
           {streamContent && (
             <Card
-              title="正在生成..."
+              title={generating ? "正在生成..." : "生成完成"}
               ref={streamRef}
-              style={{ maxHeight: 300, overflow: 'auto', background: '#f6ffed' }}
+              style={{ maxHeight: 300, overflow: 'auto', background: generating ? '#f6ffed' : '#fff' }}
             >
-              <Paragraph>{streamContent}</Paragraph>
+              <Paragraph style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>{streamContent}</Paragraph>
             </Card>
           )}
 
           {/* 章节编辑区 */}
           {selectedChapter ? (
             <Card
-              title={`第${selectedChapter.chapter_number}章 ${selectedChapter.title}`}
-              extra={<Button icon={<EyeOutlined />} onClick={() => message.info('预览功能开发中')}>预览</Button>}
+              title={selectedChapter.title?.startsWith('第') ? selectedChapter.title : `第${selectedChapter.chapter_number}章 ${selectedChapter.title}`}
+              extra={<Button icon={<EyeOutlined />} onClick={() => setPreviewOpen(true)}>预览</Button>}
             >
               <TextArea
                 value={editingContent}
@@ -310,6 +355,21 @@ export default function WritingPage() {
           )}
         </div>
       </div>
+
+      {/* 预览弹窗 */}
+      <Modal
+        title={selectedChapter ? `${selectedChapter.title?.startsWith('第') ? selectedChapter.title : `第${selectedChapter.chapter_number}章 ${selectedChapter.title}`} - 预览` : '预览'}
+        open={previewOpen}
+        onCancel={() => setPreviewOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setPreviewOpen(false)}>关闭</Button>,
+        ]}
+        width={800}
+      >
+        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 16, padding: '8px 0' }}>
+          {editingContent || '暂无内容'}
+        </div>
+      </Modal>
     </AppLayout>
   );
 }

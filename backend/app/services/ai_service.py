@@ -14,6 +14,7 @@ from app.models.project import Project
 from app.models.worldview import Worldview
 from app.models.character import Character
 from app.models.chapter import Chapter
+from app.models.volume import Volume
 
 
 class AIService:
@@ -150,6 +151,31 @@ class AIService:
         finally:
             await client.close()
 
+    async def generate_chapter_meta(self, db: AsyncSession, content: str, chapter_number: int) -> dict:
+        """Generate title and summary for a chapter after it's written."""
+        messages = [
+            {"role": "system", "content": "你是小说编辑。根据给出的章节正文，生成标题和摘要。严格按JSON格式输出。"},
+            {"role": "user", "content": f"""以下是第{chapter_number}章的正文内容（前2000字）：
+
+{content[:2000]}
+
+请输出JSON格式：
+{{"title": "第{chapter_number}章 XXX", "summary": "100字以内的章节摘要"}}
+
+注意：title 必须以"第{chapter_number}章"开头。"""},
+        ]
+        client = await self._build_client(db)
+        try:
+            result = await client.chat(messages, temperature=0.3, max_tokens=300)
+            text = str(result)
+            import re
+            match = re.search(r'\{.*\}', text, re.DOTALL)
+            if match:
+                return json.loads(match.group())
+            return {}
+        finally:
+            await client.close()
+
     async def check_consistency(
         self, db: AsyncSession, new_content: str, existing_content: list[dict]
     ) -> str:
@@ -166,6 +192,34 @@ class AIService:
         client = await self._build_client(db)
         try:
             return await client.chat(messages, temperature=0.3)
+        finally:
+            await client.close()
+
+    async def generate_outline(
+        self, db: AsyncSession, project: Project,
+        story_core: str, worldview: str, characters: list[Character],
+    ) -> str:
+        """Generate a full outline with volumes and chapter outlines."""
+        prompt = self._load_prompt("outline")
+
+        char_summary = "\n".join([
+            f"- {c.name}（{c.role_type}）: {c.background} 性格：{', '.join(c.personality if isinstance(c.personality, list) else [])}"
+            for c in characters
+        ])
+
+        messages = [
+            {"role": "system", "content": prompt["system"]},
+            {"role": "user", "content": prompt["user"].format(
+                name=project.name,
+                genre=project.genre,
+                story_core=story_core,
+                worldview=worldview,
+                characters=char_summary,
+            )},
+        ]
+        client = await self._build_client(db)
+        try:
+            return await client.chat(messages, temperature=0.85, max_tokens=8192)
         finally:
             await client.close()
 

@@ -31,7 +31,7 @@ import {
   BookOutlined,
 } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
-import { chapterApi, volumeApi, foreshadowingApi } from '../../services/api';
+import { chapterApi, volumeApi, foreshadowingApi, aiApi } from '../../services/api';
 import type { Chapter, Volume, ChapterOutlineDetail } from '../../services/api';
 
 const { Title, Paragraph, Text } = Typography;
@@ -96,6 +96,7 @@ export default function OutlinePage() {
   const [chapters, setChapters] = useState<ChapterDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generatingOutline, setGeneratingOutline] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm] = Form.useForm();
   const [activeKeys, setActiveKeys] = useState<string[]>([]);
@@ -474,7 +475,21 @@ export default function OutlinePage() {
           </Button>
           <Button
             icon={<ThunderboltOutlined />}
-            onClick={() => message.info('AI 生成大纲功能即将上线')}
+            onClick={async () => {
+              setGeneratingOutline(true);
+              const hide = message.loading('AI 正在生成大纲...', 0);
+              try {
+                const { data } = await aiApi.generateOutline(id!);
+                message.success(`大纲生成完成！共 ${data.volumes_created} 卷、${data.chapters_created} 章`);
+                await fetchData();
+              } catch (err: any) {
+                message.error(err?.message || '大纲生成失败');
+              } finally {
+                hide();
+                setGeneratingOutline(false);
+              }
+            }}
+            loading={generatingOutline}
           >
             AI 生成大纲
           </Button>

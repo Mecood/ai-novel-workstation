@@ -167,7 +167,7 @@ export const chapterApi = {
       `/projects/${projectId}/chapters/previous-summary`,
       { params: currentChapter ? { current_chapter: currentChapter } : undefined }
     ),
-  regenerate: (projectId: string, chapterId: string, onChunk: (text: string) => void) => {
+  regenerate: (projectId: string, chapterId: string, onChunk: (text: string) => void, onDone?: (data: any) => void) => {
     return fetch(`${API_BASE}/projects/${projectId}/chapters/${chapterId}/regenerate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -188,13 +188,17 @@ export const chapterApi = {
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
+            const raw = line.slice(6);
+            if (raw === '[DONE]') continue;
             try {
-              const parsed = JSON.parse(data);
-              if (parsed.text) onChunk(parsed.text);
+              const parsed = JSON.parse(raw);
+              if (parsed.type === 'chunk' && parsed.text) {
+                onChunk(parsed.text);
+              } else if (parsed.type === 'done' && onDone) {
+                onDone(parsed);
+              }
             } catch {
-              onChunk(data);
+              onChunk(raw);
             }
           }
         }
@@ -367,7 +371,7 @@ export const aiApi = {
     api.post(`/projects/${projectId}/worldview/generate`),
   generateCharacters: (projectId: string) =>
     api.post(`/projects/${projectId}/characters/generate`),
-  generateChapter: (projectId: string, onChunk: (text: string) => void) => {
+  generateChapter: (projectId: string, onChunk: (text: string) => void, onDone?: (data: any) => void) => {
     return fetch(`${API_BASE}/projects/${projectId}/chapters/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -388,13 +392,18 @@ export const aiApi = {
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
+            const raw = line.slice(6);
+            if (raw === '[DONE]') continue;
             try {
-              const parsed = JSON.parse(data);
-              if (parsed.text) onChunk(parsed.text);
+              const parsed = JSON.parse(raw);
+              if (parsed.type === 'chunk' && parsed.text) {
+                onChunk(parsed.text);
+              } else if (parsed.type === 'done' && onDone) {
+                onDone(parsed);
+              }
             } catch {
-              onChunk(data);
+              // raw text fallback
+              onChunk(raw);
             }
           }
         }
@@ -402,7 +411,11 @@ export const aiApi = {
     });
   },
   checkConsistency: (projectId: string) =>
-    api.post(`/projects/${projectId}/consistency/check`),
+    api.post<{ content: string }>(`/projects/${projectId}/consistency/check`),
+  generateOutline: (projectId: string) =>
+    api.post<{ content: string; volumes_created: number; chapters_created: number }>(
+      `/projects/${projectId}/outline/generate`
+    ),
 };
 
 // === Export ===
