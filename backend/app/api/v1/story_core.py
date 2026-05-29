@@ -91,7 +91,7 @@ async def generate_story_core(
 
     await _ensure_ai_configured(db)
 
-    content = await ai_service.generate_story_core(project)
+    content = await ai_service.generate_story_core(db, project)
 
     try:
         parsed = json.loads(content)
