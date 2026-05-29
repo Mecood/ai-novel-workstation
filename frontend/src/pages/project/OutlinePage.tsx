@@ -61,6 +61,11 @@ interface ChapterDraft extends Chapter {
   draftHooks: string;
   draftHighlights: string;
   draftSuspense: string;
+  draftOpening: string;
+  draftPurpose: string;
+  draftConflict: string;
+  draftCharacterArc: string;
+  draftPacing: string;
 }
 
 const toStr = (v: unknown): string => {
@@ -94,6 +99,11 @@ const buildChapterDraft = (c: Chapter): ChapterDraft => {
     draftHooks: o.hooks || '',
     draftHighlights: o.highlights || '',
     draftSuspense: o.suspense || '',
+    draftOpening: o.opening || '',
+    draftPurpose: o.purpose || '',
+    draftConflict: o.conflict || '',
+    draftCharacterArc: o.character_arc || '',
+    draftPacing: o.pacing || '',
   };
 };
 
@@ -270,7 +280,12 @@ export default function OutlinePage() {
             summary: c.draftSummary,
             status: c.status,
             outline_detail: {
+              opening: c.draftOpening,
               events: c.draftEvents,
+              purpose: c.draftPurpose,
+              conflict: c.draftConflict,
+              character_arc: c.draftCharacterArc,
+              pacing: c.draftPacing,
               hooks: c.draftHooks,
               highlights: c.draftHighlights,
               suspense: c.draftSuspense,
@@ -313,12 +328,62 @@ export default function OutlinePage() {
         />
         <Row gutter={[12, 8]}>
           <Col xs={24} md={12}>
-            <Text type="secondary" style={{ fontSize: 12 }}>事件</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>开场</Text>
+            <TextArea
+              value={chapter.draftOpening}
+              onChange={(e) => updateChapterField(chapter.id, 'draftOpening', e.target.value)}
+              placeholder="本章开场场景，起始状态和氛围"
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              readOnly={!editMode}
+            />
+          </Col>
+          <Col xs={24} md={12}>
+            <Text type="secondary" style={{ fontSize: 12 }}>目的</Text>
+            <TextArea
+              value={chapter.draftPurpose}
+              onChange={(e) => updateChapterField(chapter.id, 'draftPurpose', e.target.value)}
+              placeholder="本章为什么存在：推进主线/塑造角色/埋设伏笔"
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              readOnly={!editMode}
+            />
+          </Col>
+          <Col xs={24} md={12}>
+            <Text type="secondary" style={{ fontSize: 12 }}>核心事件</Text>
             <TextArea
               value={chapter.draftEvents}
               onChange={(e) => updateChapterField(chapter.id, 'draftEvents', e.target.value)}
-              placeholder="本章发生的关键事件、场景变化"
+              placeholder="场景序列：【场景名】：谁在场+地点+发生了什么"
+              autoSize={{ minRows: 3, maxRows: 6 }}
+              readOnly={!editMode}
+            />
+          </Col>
+          <Col xs={24} md={12}>
+            <Text type="secondary" style={{ fontSize: 12 }}>冲突</Text>
+            <TextArea
+              value={chapter.draftConflict}
+              onChange={(e) => updateChapterField(chapter.id, 'draftConflict', e.target.value)}
+              placeholder="核心冲突+展开步骤+结果"
               autoSize={{ minRows: 2, maxRows: 5 }}
+              readOnly={!editMode}
+            />
+          </Col>
+          <Col xs={24} md={12}>
+            <Text type="secondary" style={{ fontSize: 12 }}>角色弧线</Text>
+            <TextArea
+              value={chapter.draftCharacterArc}
+              onChange={(e) => updateChapterField(chapter.id, 'draftCharacterArc', e.target.value)}
+              placeholder="出场角色的态度/状态变化"
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              readOnly={!editMode}
+            />
+          </Col>
+          <Col xs={24} md={12}>
+            <Text type="secondary" style={{ fontSize: 12 }}>情感节奏</Text>
+            <TextArea
+              value={chapter.draftPacing}
+              onChange={(e) => updateChapterField(chapter.id, 'draftPacing', e.target.value)}
+              placeholder="情绪曲线方向、高潮位置、结尾情绪"
+              autoSize={{ minRows: 2, maxRows: 4 }}
               readOnly={!editMode}
             />
           </Col>
@@ -327,8 +392,8 @@ export default function OutlinePage() {
             <TextArea
               value={chapter.draftHooks}
               onChange={(e) => updateChapterField(chapter.id, 'draftHooks', e.target.value)}
-              placeholder="章节开篇 / 结尾的钩子"
-              autoSize={{ minRows: 2, maxRows: 5 }}
+              placeholder="章末追读钩子，让读者想翻到下一章"
+              autoSize={{ minRows: 2, maxRows: 4 }}
               readOnly={!editMode}
             />
           </Col>
@@ -337,18 +402,18 @@ export default function OutlinePage() {
             <TextArea
               value={chapter.draftHighlights}
               onChange={(e) => updateChapterField(chapter.id, 'draftHighlights', e.target.value)}
-              placeholder="情绪高潮 / 爽点设计"
-              autoSize={{ minRows: 2, maxRows: 5 }}
+              placeholder="爽点位置+类型+强度（1-5星）"
+              autoSize={{ minRows: 2, maxRows: 4 }}
               readOnly={!editMode}
             />
           </Col>
-          <Col xs={24} md={12}>
-            <Text type="secondary" style={{ fontSize: 12 }}>悬念</Text>
+          <Col xs={24}>
+            <Text type="secondary" style={{ fontSize: 12 }}>悬念 / 伏笔</Text>
             <TextArea
               value={chapter.draftSuspense}
               onChange={(e) => updateChapterField(chapter.id, 'draftSuspense', e.target.value)}
-              placeholder="埋下的悬念 / 未解之谜"
-              autoSize={{ minRows: 2, maxRows: 5 }}
+              placeholder="未解之谜+伏笔呼应关系"
+              autoSize={{ minRows: 2, maxRows: 4 }}
               readOnly={!editMode}
             />
           </Col>

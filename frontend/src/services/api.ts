@@ -130,6 +130,11 @@ export interface ChapterOutlineDetail {
   hooks?: string;
   highlights?: string;
   suspense?: string;
+  opening?: string;
+  purpose?: string;
+  conflict?: string;
+  character_arc?: string;
+  pacing?: string;
 }
 
 export interface Chapter {

@@ -263,11 +263,19 @@ async def generate_chapter(
 
     await client.close()
 
+    # Look up outline detail for the target chapter (from AI-generated outline)
+    outline_detail = None
+    for ch in chapters:
+        if ch.chapter_number == next_number and ch.outline_detail:
+            outline_detail = ch.outline_detail
+            break
+
     async def event_generator():
         full_content = ""
         async for chunk in ai_service.generate_chapter_stream(
             db, project, next_number, story_core_text,
             worldview_text, characters, chapters, vector_context,
+            outline_detail=outline_detail,
         ):
             full_content += chunk
             yield {"data": json.dumps({"type": "chunk", "text": chunk})}
@@ -533,6 +541,7 @@ async def regenerate_chapter(
         async for chunk in ai_service.generate_chapter_stream(
             db, project, target_number, story_core_text,
             worldview_text, characters, other_chapters,
+            outline_detail=chapter.outline_detail,
         ):
             full_content += chunk
             yield {"data": json.dumps({"type": "chunk", "text": chunk})}

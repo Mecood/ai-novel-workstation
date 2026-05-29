@@ -109,6 +109,7 @@ class AIService:
         story_core: str, worldview: str, characters: list[Character],
         previous_chapters: list[Chapter],
         vector_context: str = "",
+        outline_detail: dict | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream chapter generation with optional vector context."""
         prompt = self._load_prompt("chapter")
@@ -130,6 +131,28 @@ class AIService:
         if vector_context:
             extra_context = f"\n\n### 相关历史内容（向量检索）\n以下是与本章相关的历史情节片段：\n{vector_context}"
 
+        # 构建本章细纲段落
+        outline_section = ""
+        if outline_detail:
+            parts = []
+            label_map = {
+                "opening": "开场",
+                "events": "核心事件",
+                "purpose": "目的",
+                "conflict": "冲突",
+                "character_arc": "角色弧线",
+                "pacing": "情感节奏",
+                "hooks": "钩子",
+                "highlights": "爽点",
+                "suspense": "悬念",
+            }
+            for key, label in label_map.items():
+                val = outline_detail.get(key)
+                if val:
+                    parts.append(f"- {label}：{val}")
+            if parts:
+                outline_section = "### 本章细纲（严格参照以下细纲写作）\n" + "\n".join(parts)
+
         messages = [
             {"role": "system", "content": prompt["system"]},
             {"role": "user", "content": prompt["user"].format(
@@ -141,6 +164,7 @@ class AIService:
                 chapter_number=chapter_number,
                 prev_summary=prev_summary,
                 extra_context=extra_context,
+                outline_section=outline_section,
             )},
         ]
 
