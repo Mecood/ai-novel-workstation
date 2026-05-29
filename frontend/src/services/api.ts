@@ -98,6 +98,10 @@ export interface Worldview {
   description: string;
   rules: string[];
   timeline: any[];
+  _version?: number;
+  _stale?: string;
+  _based_on?: any;
+  _history?: any[];
   created_at: string;
 }
 

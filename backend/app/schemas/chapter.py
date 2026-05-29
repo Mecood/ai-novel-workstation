@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Any, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from uuid import UUID
 
 
@@ -33,11 +33,11 @@ class ChapterResponse(BaseModel):
     outline_detail: Optional[Any] = None
     word_count: int
     status: str
-    _version: Optional[int] = None
-    _stale: Optional[str] = None
-    _based_on: Optional[Any] = None
-    _history: Optional[Any] = None
+    version: Optional[int] = Field(None, alias="_version")
+    stale: Optional[str] = Field(None, alias="_stale")
+    based_on: Optional[Any] = Field(None, alias="_based_on")
+    history: Optional[Any] = Field(None, alias="_history")
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}

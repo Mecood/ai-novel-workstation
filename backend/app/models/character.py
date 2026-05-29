@@ -23,3 +23,19 @@ class Character(Base):
     _stale = Column(String(10), nullable=False, default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    @property
+    def version(self):
+        return self._version
+
+    @property
+    def stale(self):
+        return self._stale
+
+    @property
+    def based_on(self):
+        return self._based_on
+
+    @property
+    def history(self):
+        return self._history
