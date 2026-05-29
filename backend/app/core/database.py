@@ -33,8 +33,11 @@ class GUID(TypeDecorator):
 # Switch to SQLite if the URL is postgresql (for local dev without Docker)
 _db_url = settings.DATABASE_URL
 if _db_url.startswith("postgresql") and "sqlite" not in _db_url:
-    print("[DB] PostgreSQL configured but not available. Falling back to SQLite for local dev.")
-    _db_url = "sqlite+aiosqlite:///./novel_workstation.db"
+    import pathlib
+    _backend_dir = pathlib.Path(__file__).resolve().parent.parent.parent
+    _db_file = _backend_dir / "novel_workstation.db"
+    print(f"[DB] PostgreSQL configured but not available. Falling back to SQLite: {_db_file}")
+    _db_url = f"sqlite+aiosqlite:///{_db_file}"
 
 engine = create_async_engine(_db_url, echo=settings.DEBUG)
 
