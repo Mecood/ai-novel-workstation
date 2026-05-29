@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Card, Spin, message, Button, Typography, Tag, Descriptions, Empty, Avatar } from 'antd';
+import { Card, Spin, message, Button, Typography, Tag, Descriptions, Empty, Avatar, Alert } from 'antd';
 import { ThunderboltOutlined, UserOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import { characterApi, aiApi } from '../../services/api';
@@ -89,6 +89,14 @@ export default function CharactersPage() {
             gap: 16,
           }}
         >
+          {(characters[0] as any)?._stale === 'true' && (
+            <Alert
+              type="warning"
+              message="上游已变化，角色数据可能不一致，建议重新生成"
+              showIcon
+              style={{ marginBottom: 16, gridColumn: '1 / -1' }}
+            />
+          )}
           {characters.map((c) => (
             <Card key={c.id} hoverable>
               <Card.Meta

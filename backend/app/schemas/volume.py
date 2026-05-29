@@ -40,6 +40,10 @@ class VolumeResponse(BaseModel):
     emotion_arc: Optional[Any] = None
     foreshadowing_notes: Optional[Any] = None
     twists: Optional[Any] = None
+    _version: Optional[int] = None
+    _stale: Optional[str] = None
+    _based_on: Optional[Any] = None
+    _history: Optional[Any] = None
     created_at: datetime
     updated_at: datetime
 

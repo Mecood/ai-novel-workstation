@@ -25,6 +25,10 @@ class WorldviewResponse(BaseModel):
     description: str
     rules: Optional[Any] = None
     timeline: Optional[Any] = None
+    _version: Optional[int] = None
+    _stale: Optional[str] = None
+    _based_on: Optional[Any] = None
+    _history: Optional[Any] = None
     created_at: datetime
     updated_at: datetime
 

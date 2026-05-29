@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Card, Spin, message, Button, Typography, Tag, Timeline, Empty } from 'antd';
+import { Card, Spin, message, Button, Typography, Tag, Timeline, Empty, Alert } from 'antd';
 import { ThunderboltOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
+import VersionBadge from '../../components/VersionBadge';
 import { worldviewApi, aiApi } from '../../services/api';
 import type { Worldview } from '../../services/api';
 
@@ -61,8 +62,26 @@ export default function WorldviewPage() {
       {worldviews.length === 0 ? (
         <Empty description="暂无世界观设定，点击上方按钮生成" />
       ) : (
-        worldviews.map((wv) => (
+        worldviews.map((wv: any) => (
           <Card key={wv.id} title={wv.name} style={{ marginBottom: 16 }}>
+            {wv._stale === 'true' && (
+              <Alert
+                type="warning"
+                message="上游已变化，内容可能不一致，建议重新生成"
+                showIcon
+                style={{ marginBottom: 12 }}
+              />
+            )}
+            <VersionBadge
+              version={wv._version || 0}
+              stale={wv._stale === 'true'}
+              history={wv._history || []}
+              onRestore={async (v) => {
+                if (!id) return;
+                await fetch(`/v1/projects/${id}/worldview/restore/${v}`, { method: 'POST' });
+                fetchData();
+              }}
+            />
             <Paragraph>{wv.description}</Paragraph>
             {wv.rules && wv.rules.length > 0 && (
               <div style={{ marginTop: 12 }}>
