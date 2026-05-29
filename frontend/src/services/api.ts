@@ -434,6 +434,7 @@ export const storyCoreApi = {
   get: (projectId: string) => api.get(`/projects/${projectId}/story-core`),
   update: (projectId: string, data: Record<string, any>) => api.put(`/projects/${projectId}/story-core`, data),
   generate: (projectId: string) => api.post(`/projects/${projectId}/story-core/generate`),
+  restore: (projectId: string, version: number) => api.post(`/projects/${projectId}/story-core/restore/${version}`),
 };
 
 export const exportApi = {

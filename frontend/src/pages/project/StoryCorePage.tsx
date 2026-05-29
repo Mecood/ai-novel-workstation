@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Card, Spin, message, Button, Typography, Form, Input, Empty, Space } from 'antd';
 import { ThunderboltOutlined, SaveOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
+import VersionBadge from '../../components/VersionBadge';
 import { storyCoreApi } from '../../services/api';
 
 const { Title } = Typography;
@@ -106,6 +107,13 @@ export default function StoryCorePage() {
     }
   };
 
+  const handleRestore = async (version: number) => {
+    if (!id) return;
+    const { data } = await storyCoreApi.restore(id, version);
+    setStoryCore(data?.story_core ?? null);
+    fetchData(); // Reload
+  };
+
   if (loading) {
     return (
       <AppLayout projectId={id!}>
@@ -175,6 +183,14 @@ export default function StoryCorePage() {
         </Card>
       ) : (
         <Card>
+          {storyCore && (
+            <VersionBadge
+              version={storyCore._version || 0}
+              stale={false}
+              history={storyCore._history || []}
+              onRestore={handleRestore}
+            />
+          )}
           <Form form={form} layout="vertical">
             <Form.Item label="核心冲突" name="core_conflict">
               <TextArea rows={1} placeholder="故事的核心冲突..." />

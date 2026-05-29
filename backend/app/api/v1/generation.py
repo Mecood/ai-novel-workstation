@@ -1,6 +1,7 @@
 """AI generation API routes with SSE streaming."""
 import json
 import re
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from app.models.volume import Volume
 from app.models.knowledge import Knowledge
 from app.services.ai_service import AIService
 from app.services.vector_search import VectorSearchService
+from app.services.version_service import version_service
 
 router = APIRouter(prefix="/projects/{project_id}")
 ai_service = AIService()
@@ -83,14 +85,29 @@ async def generate_story_core(
 
     content = await ai_service.generate_story_core(db, project)
 
+    # Save old version to history before overwriting
+    version_service.save_story_core_snapshot(project)
+
     # Update project with story core
     try:
-        project.story_core = _extract_json(content)
+        new_sc = _extract_json(content)
     except json.JSONDecodeError:
-        project.story_core = {"raw": content}
+        new_sc = {"raw": content}
+
+    # Preserve version info
+    sc_version = int((project.story_core or {}).get("_version", 0) or 0)
+    sc_history = (project.story_core or {}).get("_history", [])
+    new_sc["_version"] = sc_version + 1
+    new_sc["_based_on"] = {}
+    new_sc["_history"] = sc_history
+    project.story_core = new_sc
     await db.commit()
 
-    return {"content": content}
+    # Mark downstream stale
+    await version_service.mark_downstream_stale(db, project_id, "story_core")
+    await db.commit()
+
+    return {"content": content, "version": sc_version + 1}
 
 
 @router.post("/worldview/generate")
@@ -124,7 +141,14 @@ async def generate_worldview(
         select(Worldview).where(Worldview.project_id == project_id)
     )
     worldview = result.scalar_one_or_none()
+
+    # Version management: get upstream versions
+    upstream_versions = await version_service.get_upstream_versions(db, project_id)
+    based_on = {"story_core": upstream_versions.get("story_core", 0)}
+
     if worldview:
+        # Save old version to history before updating
+        await version_service.save_and_bump(db, worldview, based_on)
         worldview.name = name
         worldview.description = description
         worldview.rules = rules
@@ -138,6 +162,15 @@ async def generate_worldview(
             timeline=timeline,
         )
         db.add(worldview)
+        await db.flush()
+        await version_service.save_and_bump(db, worldview, based_on)
+
+    # Clear stale flag
+    worldview._stale = "false"
+    await db.commit()
+
+    # Mark downstream stale
+    await version_service.mark_downstream_stale(db, project_id, "worldview")
     await db.commit()
 
     # Auto-extract knowledge from worldview
@@ -147,7 +180,7 @@ async def generate_worldview(
     except Exception:
         pass  # Don't fail generation if knowledge extraction fails
 
-    return {"content": content}
+    return {"content": content, "version": worldview._version}
 
 
 @router.post("/characters/generate")
@@ -179,7 +212,34 @@ async def generate_characters(
     if not isinstance(parsed, list):
         parsed = []
 
+    # Save batch snapshot of current characters before deleting
+    existing_chars_result = await db.execute(
+        select(Character).where(Character.project_id == project_id)
+    )
+    existing_chars = list(existing_chars_result.scalars().all())
+    batch_snapshot = []
+    if existing_chars:
+        current_version = max((c._version or 0 for c in existing_chars), default=0)
+        for c in existing_chars:
+            batch_snapshot.append({
+                "name": c.name,
+                "role_type": c.role_type,
+                "personality": c.personality,
+                "background": c.background,
+                "appearance": c.appearance,
+                "relationships": c.relationships,
+                "arc": c.arc,
+            })
+
     await db.execute(delete(Character).where(Character.project_id == project_id))
+
+    # Version management: get upstream versions for new characters
+    upstream_versions = await version_service.get_upstream_versions(db, project_id)
+    char_version = int(upstream_versions.get("characters", 0) or 0) + 1
+    based_on = {
+        "story_core": upstream_versions.get("story_core", 0),
+        "worldview": upstream_versions.get("worldview", 0),
+    }
 
     for item in parsed:
         if not isinstance(item, dict):
@@ -200,7 +260,20 @@ async def generate_characters(
             appearance=appearance,
             relationships=relationships,
             arc=arc,
+            _version=char_version,
+            _based_on=based_on,
+            _stale="false",
+            _history=[{
+                "version": current_version if existing_chars else 0,
+                "created_at": datetime.now(timezone.utc).isoformat() if 'datetime' in dir() else "",
+                "based_on": {},
+                "data": batch_snapshot,
+            }] if batch_snapshot else [],
         ))
+    await db.commit()
+
+    # Mark downstream stale
+    await version_service.mark_downstream_stale(db, project_id, "characters")
     await db.commit()
 
     # Auto-extract knowledge from characters
@@ -210,7 +283,7 @@ async def generate_characters(
     except Exception:
         pass
 
-    return {"content": content}
+    return {"content": content, "version": char_version}
 
 
 @router.post("/chapters/generate")
@@ -293,6 +366,12 @@ async def generate_chapter(
             pass  # Fallback to default title
 
         # Save chapter to database
+        upstream_versions = await version_service.get_upstream_versions(db, project_id)
+        based_on = {
+            "story_core": upstream_versions.get("story_core", 0),
+            "worldview": upstream_versions.get("worldview", 0),
+            "characters": upstream_versions.get("characters", 0),
+        }
         chapter = Chapter(
             project_id=project_id,
             chapter_number=next_number,
@@ -301,6 +380,9 @@ async def generate_chapter(
             summary=summary,
             word_count=len(full_content),
             status="generated",
+            _version=1,
+            _based_on=based_on,
+            _stale="false",
         )
         db.add(chapter)
         await db.commit()
@@ -381,6 +463,15 @@ async def generate_outline(
     for c in existing_chapters.scalars().all():
         await db.delete(c)
 
+    # Version management: get upstream versions
+    upstream_versions = await version_service.get_upstream_versions(db, project_id)
+    based_on = {
+        "story_core": upstream_versions.get("story_core", 0),
+        "worldview": upstream_versions.get("worldview", 0),
+        "characters": upstream_versions.get("characters", 0),
+    }
+    outline_version = 1
+
     chapters_created = 0
     for vol_idx, vol_data in enumerate(volumes_data, 1):
         title = vol_data.get("title") or f"第{vol_idx}卷"
@@ -400,6 +491,9 @@ async def generate_outline(
             emotion_arc=emotion_arc,
             foreshadowing_notes=foreshadowing_notes,
             twists=twists,
+            _version=outline_version,
+            _based_on=based_on,
+            _stale="false",
         )
         db.add(volume)
         await db.flush()
@@ -414,12 +508,20 @@ async def generate_outline(
                 content={"text": ""},
                 summary="",
                 outline_detail={
+                    "opening": ch_data.get("opening", ""),
                     "events": ch_data.get("events", ""),
+                    "purpose": ch_data.get("purpose", ""),
+                    "conflict": ch_data.get("conflict", ""),
+                    "character_arc": ch_data.get("character_arc", ""),
+                    "pacing": ch_data.get("pacing", ""),
                     "hooks": ch_data.get("hooks", ""),
                     "highlights": ch_data.get("highlights", ""),
                     "suspense": ch_data.get("suspense", ""),
                 },
                 status="outlined",
+                _version=outline_version,
+                _based_on=based_on,
+                _stale="false",
             )
             db.add(chapter)
             chapters_created += 1
@@ -547,8 +649,15 @@ async def regenerate_chapter(
             yield {"data": json.dumps({"type": "chunk", "text": chunk})}
 
         # Update chapter content in place
+        # Save old version to history first
+        await version_service.save_and_bump(db, chapter, based_on={
+            "story_core": int((project.story_core or {}).get("_version", 0) or 0),
+            "worldview": worldview._version or 0 if worldview else 0,
+            "characters": max((c._version or 0 for c in other_chapters), default=0),
+        })
         chapter.content = {"text": full_content}
         chapter.word_count = len(full_content)
+        chapter._stale = "false"
         await db.commit()
 
         # Auto-extract knowledge from regenerated chapter
@@ -566,3 +675,95 @@ async def regenerate_chapter(
         })}
 
     return EventSourceResponse(event_generator())
+
+# ── Version Restore Endpoints ──
+
+
+@router.post("/story-core/restore/{version}")
+async def restore_story_core(
+    project_id: str,
+    version: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Restore story_core to a specific version."""
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    success = version_service.restore_story_core_version(project, version)
+    if not success:
+        raise HTTPException(404, f"Version {version} not found in history")
+
+    # Mark downstream stale after restoring
+    await version_service.mark_downstream_stale(db, project_id, "story_core")
+    await db.commit()
+
+    return {"success": True, "version": version, "story_core": project.story_core}
+
+
+@router.post("/worldview/restore/{version}")
+async def restore_worldview(
+    project_id: str,
+    version: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Restore worldview to a specific version."""
+    result = await db.execute(
+        select(Worldview).where(Worldview.project_id == project_id)
+    )
+    worldview = result.scalar_one_or_none()
+    if not worldview:
+        raise HTTPException(404, "Worldview not found")
+
+    success = await version_service.restore_node_version(db, worldview, version)
+    if not success:
+        raise HTTPException(404, f"Version {version} not found in history")
+
+    await version_service.mark_downstream_stale(db, project_id, "worldview")
+    await db.commit()
+
+    return {"success": True, "version": worldview._version}
+
+
+@router.post("/characters/restore/{version}")
+async def restore_characters(
+    project_id: str,
+    version: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Restore all characters to a specific version batch."""
+    result = await db.execute(
+        select(Character)
+        .where(Character.project_id == project_id)
+        .limit(1)
+    )
+    char = result.scalar_one_or_none()
+    if not char:
+        raise HTTPException(404, "No characters found")
+
+    # For characters, restore from the first character's history (batch snapshot)
+    history = char._history or []
+    target = None
+    for h in history:
+        if h.get("version") == version:
+            target = h
+            break
+    if not target:
+        raise HTTPException(404, f"Version {version} not found in history")
+
+    # Delete current characters and recreate from snapshot
+    await db.execute(delete(Character).where(Character.project_id == project_id))
+
+    for char_data in target.get("data", []):
+        db.add(Character(
+            project_id=project_id,
+            **{k: v for k, v in char_data.items() if k not in ("id", "project_id")},
+            _version=version,
+            _based_on=target.get("based_on", {}),
+            _stale="false",
+        ))
+
+    await version_service.mark_downstream_stale(db, project_id, "characters")
+    await db.commit()
+
+    return {"success": True, "version": version}
