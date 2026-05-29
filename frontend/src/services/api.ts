@@ -382,6 +382,8 @@ export const aiApi = {
     api.post(`/projects/${projectId}/worldview/generate`),
   generateCharacters: (projectId: string) =>
     api.post(`/projects/${projectId}/characters/generate`),
+  generateOutline: (projectId: string) =>
+    api.post(`/projects/${projectId}/outline/generate`),
   generateChapter: (projectId: string, onChunk: (text: string) => void, onDone?: (data: any) => void) => {
     return fetch(`${API_BASE}/projects/${projectId}/chapters/generate`, {
       method: 'POST',

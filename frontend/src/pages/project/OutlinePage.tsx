@@ -120,6 +120,7 @@ export default function OutlinePage() {
   const [unresolvedOverdue, setUnresolvedOverdue] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState<'form' | 'tree'>('form');
+  const [generating, setGenerating] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -251,6 +252,28 @@ export default function OutlinePage() {
       message.success('已删除');
     } catch {
       message.error('删除失败');
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!id) return;
+    setGenerating(true);
+    message.loading({ content: 'AI 正在生成大纲...', key: 'outline_gen' });
+    try {
+      const { data } = await aiApi.generateOutline(id);
+      message.success({
+        content: `大纲生成完成：${data?.volumes_created || 0}卷 ${data?.chapters_created || 0}章`,
+        key: 'outline_gen',
+        duration: 3,
+      });
+      await fetchData();
+    } catch (e: any) {
+      message.error({
+        content: `生成失败：${e?.message || '未知错误'}`,
+        key: 'outline_gen',
+      });
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -599,7 +622,8 @@ export default function OutlinePage() {
           </Button>
           <Button
             icon={<ThunderboltOutlined />}
-            onClick={() => message.info('AI 生成大纲功能即将上线')}
+            loading={generating}
+            onClick={handleGenerate}
           >
             AI 生成大纲
           </Button>
