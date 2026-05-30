@@ -83,31 +83,38 @@ async def generate_story_core(
     if not project:
         raise HTTPException(404, "Project not found")
 
+    # Save current version and history BEFORE generating
+    old_version = int((project.story_core or {}).get("_version", 0) or 0)
+    old_history = list((project.story_core or {}).get("_history", []))
+
     content = await ai_service.generate_story_core(db, project)
 
-    # Save old version to history before overwriting
-    version_service.save_story_core_snapshot(project)
-
-    # Update project with story core
     try:
         new_sc = _extract_json(content)
     except json.JSONDecodeError:
         new_sc = {"raw": content}
 
-    # Preserve version info
-    sc_version = int((project.story_core or {}).get("_version", 0) or 0)
-    sc_history = (project.story_core or {}).get("_history", [])
-    new_sc["_version"] = sc_version + 1
+    # Merge version tracking into the new story core
+    new_version = old_version + 1
+    # Save current state to history (before overwriting)
+    if old_version > 0:
+        old_snapshot = {
+            "version": old_version,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "data": {k: v for k, v in (project.story_core or {}).items() if not k.startswith("_")},
+        }
+        old_history.append(old_snapshot)
+
+    new_sc["_version"] = new_version
     new_sc["_based_on"] = {}
-    new_sc["_history"] = sc_history
+    new_sc["_history"] = old_history
     project.story_core = new_sc
     await db.commit()
 
     # Mark downstream stale
     await version_service.mark_downstream_stale(db, project_id, "story_core")
-    await db.commit()
 
-    return {"content": content, "version": sc_version + 1}
+    return {"content": content, "version": new_version}
 
 
 @router.post("/worldview/generate")
