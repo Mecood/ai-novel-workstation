@@ -152,9 +152,24 @@ function StageDetail({ stage }: { stage: StageData }) {
     commit: '已签署契约 + 已通过提交',
   };
 
+  // Phase 18: 运行时实时详情
+  const runningDetails: Record<string, string> = {
+    init: '正在生成世界观设定和角色档案……',
+    plan: '正在规划卷纲结构，分配章节节拍……',
+    write: '正在生成章节正文（流式输出中）……',
+    review: '正在执行三层评审：L1硬指标→L2软指标→L3终审……',
+    commit: '正在签署章节契约，触发自动提交流程……',
+  };
+
   return (
     <Card size="small" style={{ marginTop: 8, background: '#fafafa', border: '1px dashed #e8e8e8' }}>
       <Text type="secondary">{detailMap[stage.id] || ''}</Text>
+      {stage.status === 'running' && (
+        <div style={{ marginTop: 6, padding: '6px 8px', background: '#e6f7ff', borderRadius: 4 }}>
+          <LoadingOutlined style={{ color: '#1890ff', marginRight: 6 }} />
+          <Text style={{ color: '#1890ff', fontSize: 12 }}>{runningDetails[stage.id] || '处理中……'}</Text>
+        </div>
+      )}
       {stage.detail && (
         <div style={{ marginTop: 8 }}>
           <Text type="danger">{stage.detail}</Text>

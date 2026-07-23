@@ -25,6 +25,8 @@ import {
 import type { Project, PipelineTransition } from '../../services/api';
 import type { PipelineData } from '../../services/api';
 import PipelineView from './components/PipelineView';
+import DashboardView from './components/DashboardView';
+import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
 const { Title, Paragraph } = Typography;
 
@@ -221,6 +223,11 @@ export default function ProjectWorkshop() {
                 </div>
               </>
             ),
+          },
+          {
+            key: 'dashboard',
+            label: '创作仪表盘',
+            children: id ? <DashboardView project={project} /> : null,
           },
         ]}
       />
