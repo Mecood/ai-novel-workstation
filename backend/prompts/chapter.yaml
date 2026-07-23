@@ -27,6 +27,10 @@ user: |
 
   {extra_context}
 
+  {memory_episodic_section}
+
+  {memory_semantic_section}
+
   {style_section}
 
   {template_section}

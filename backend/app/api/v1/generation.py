@@ -447,6 +447,20 @@ async def generate_chapter(
         except Exception:
             pass  # 不影响主流程
 
+        # ── Phase 17.5：投影写入（章节生成后写入记忆）─────────────
+        try:
+            from app.services.projection_writer import ProjectionWriter
+            proj = ProjectionWriter(db, project_id)
+            await proj.write_summary(next_number, title, summary)
+            # 写入角色当前状态快照
+            for c in characters:
+                if c.background:
+                    await proj.write_state_snapshot(
+                        next_number, c.name, "background", c.background,
+                    )
+        except Exception:
+            pass  # 不影响主流程
+
         # ── Phase 13.1：自动触发流水线 ──────────────────────────────
         try:
             from app.api.v1.auto_pipeline import _run_auto_pipeline

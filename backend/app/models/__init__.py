@@ -15,6 +15,7 @@ from app.models.reading_power import ChapterReadingPower, HookType, HookStrength
 from app.models.override_contract import OverrideContract, ConstraintType, RationaleType, ContractStatus
 from app.models.chapter_contract import ChapterContract, ContractStatus as ChapterContractStatus
 from app.models.chapter_commit import ChapterCommit, CommitStatus
+from app.models.memory_item import MemoryItem
 
 __all__ = [
     "Project", "Worldview", "Character", "Chapter", "Foreshadowing", "Knowledge",
@@ -24,5 +25,6 @@ __all__ = [
     "ConstraintType", "RationaleType", "ContractStatus",
     "ChapterContract", "ChapterContractStatus",
     "ChapterCommit", "CommitStatus",
+    "MemoryItem",
     "PipelineTransition",
 ]

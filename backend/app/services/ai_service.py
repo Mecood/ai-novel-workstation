@@ -141,13 +141,49 @@ class AIService:
             for c in characters
         ])
 
-        # ── Phase 14.1: L0-L3 渐进式上下文压缩 ──────────────────────
+        # ── Phase 17: 记忆系统替换 context_service ─────────────────
         prev_summary = ""
+        memory_episodic_section = ""
+        memory_semantic_section = ""
         try:
-            from app.services.context_service import build_compressed_context
-            prev_summary = await build_compressed_context(
-                db, str(project.id), chapter_number, max_tokens=4000,
+            from app.services.memory_orchestrator import build_memory_pack_for_chapter
+            memory_pack = await build_memory_pack_for_chapter(
+                db, str(project.id), chapter_number, task_type="write",
             )
+
+            # working memory → prev_summary（与前文兼容）
+            working_lines = memory_pack.get("working_memory", [])
+            if working_lines:
+                prev_summary = "\n".join(str(w) for w in working_lines)
+
+            # episodic memory → 情节记忆注入 prompt
+            episodic = memory_pack.get("episodic_memory", [])
+            if episodic:
+                memory_episodic_section = (
+                    "\n\n### 情节记忆（近期事件）\n"
+                    + "\n".join(str(e) for e in episodic)
+                )
+
+            # semantic memory → 长期事实注入 prompt
+            semantic = memory_pack.get("semantic_memory", [])
+            if semantic:
+                sem_lines = []
+                for s in semantic:
+                    subj = s.get("subject", "")
+                    fld = s.get("field", "")
+                    val = s.get("value", "")
+                    cat = s.get("category", "")
+                    line = f"- [{cat}] {subj}"
+                    if fld:
+                        line += f".{fld}"
+                    if val:
+                        line += f": {val[:200]}"
+                    sem_lines.append(line)
+                if sem_lines:
+                    memory_semantic_section = (
+                        "\n\n### 长期记忆（世界观/角色/伏笔/知识）\n"
+                        + "\n".join(sem_lines)
+                    )
         except Exception:
             # 回退：简单的最近 3 章摘要
             if previous_chapters:
@@ -254,6 +290,8 @@ class AIService:
                 outline_section=outline_section,
                 style_section=style_section,
                 template_section=template_section,
+                memory_episodic_section=memory_episodic_section,
+                memory_semantic_section=memory_semantic_section,
             )},
         ]
 
