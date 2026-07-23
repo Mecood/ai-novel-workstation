@@ -223,8 +223,25 @@ class AIService:
             if parts:
                 outline_section = "### 本章细纲（严格参照以下细纲写作）\n" + "\n".join(parts)
 
+        # ── Phase 16：写作指南 + 去AI味 + 风格约束 注入 ──────────
+        writing_guide_section = ""
+        try:
+            from app.services.writing_guide_service import build_writing_prompt_section
+            chapter_type = (outline_detail or {}).get("pacing", "normal")
+            # pacing 字段可能是"快/慢/中速"等节奏描述，映射到类型
+            pacing_map = {"快": "combat", "极快": "combat", "慢": "emotional", "中速": "normal"}
+            chapter_type = pacing_map.get(chapter_type, chapter_type)
+            writing_guide_section = build_writing_prompt_section(
+                chapter_type=chapter_type,
+                genre=project.genre if project.genre else None,
+                include_anti_ai=True,
+                include_style=True,
+            )
+        except Exception:
+            pass  # 指南加载失败不影响主流程
+
         messages = [
-            {"role": "system", "content": prompt["system"] + ANTI_HALLUCINATION_LAWS},
+            {"role": "system", "content": prompt["system"] + ANTI_HALLUCINATION_LAWS + "\n\n" + writing_guide_section},
             {"role": "user", "content": prompt["user"].format(
                 name=project.name,
                 genre=project.genre,

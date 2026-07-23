@@ -147,7 +147,7 @@ def detect_ai_flavor(text: str) -> dict[str, Any]:
         level = "severe"
     elif score >= 50:
         level = "high"
-    elif score >= 30:
+    elif score >= 20:
         level = "medium"
     else:
         level = "low"
