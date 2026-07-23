@@ -8,10 +8,14 @@ import OutlinePage from './pages/project/OutlinePage';
 import WritingPage from './pages/project/WritingPage';
 import ForeshadowingPage from './pages/project/ForeshadowingPage';
 import ConsistencyPage from './pages/project/ConsistencyPage';
+import EventsPage from './pages/project/EventsPage';
 import StoryCorePage from './pages/project/StoryCorePage';
 import KnowledgePage from './pages/project/KnowledgePage';
 import PromptTemplatePage from './pages/project/PromptTemplatePage';
+import DebtDashboard from './pages/project/DebtDashboard';
+import ContractsPage from './pages/project/ContractsPage';
 import ReaderPage from './pages/project/ReaderPage';
+import SearchPage from './pages/project/SearchPage';
 import ProjectSettingsPage from './pages/project/ProjectSettingsPage';
 import SettingsPage from './pages/SettingsPage';
 import AppLayout from './components/layout/AppLayout';
@@ -46,9 +50,13 @@ function App() {
           <Route path="/projects/:id/foreshadowing" element={<ForeshadowingPage />} />
           <Route path="/projects/:id/story-core" element={<StoryCorePage />} />
           <Route path="/projects/:id/consistency" element={<ConsistencyPage />} />
+          <Route path="/projects/:id/events" element={<EventsPage />} />
           <Route path="/projects/:id/knowledge" element={<KnowledgePage />} />
           <Route path="/projects/:id/prompt-templates" element={<PromptTemplatePage />} />
           <Route path="/projects/:id/reader" element={<ReaderPage />} />
+          <Route path="/projects/:id/search" element={<SearchPage />} />
+          <Route path="/projects/:id/debt" element={<DebtDashboard />} />
+          <Route path="/projects/:id/contracts" element={<ContractsPage />} />
           <Route path="/projects/:id/settings" element={<ProjectSettingsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

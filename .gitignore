@@ -42,3 +42,7 @@ chroma_db/
 
 # Generated
 *.generated.*
+
+# Test artifacts
+test_imports.py
+test_*.sh

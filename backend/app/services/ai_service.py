@@ -7,13 +7,34 @@ import yaml
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.ai_client import AIClient
 from app.models.app_config import AppConfig
 from app.models.project import Project
 from app.models.worldview import Worldview
-from app.models.character import Character
 from app.models.chapter import Chapter
+from app.models.character import Character
+from app.models.project import Project
+from app.models.genre_template import GenreTemplate
+
+# ── Phase 13.3：反幻觉三定律（注入每个 AI 生成的 system prompt）──────
+ANTI_HALLUCINATION_LAWS = """
+# 反幻觉三定律（必须严格遵守，不得违背）
+
+## 第一定律：大纲即法律
+你正在创作的是大纲已经确定的章节。必须严格遵循章节大纲中设定的情节、人物动作、场景转换。
+不得在无大纲依据的情况下增加重大情节转折、新角色登场或角色关系变更。
+如果大纲中某节写了"三人对峙"，不能写成"两人密谋"。
+
+## 第二定律：设定即物理
+世界观设定是笔下世界的物理定律，不是建议。
+角色已有境界、已有物品、已发生的地点转换、已建立的人物关系——这些不可自相矛盾。
+如果主角已设定为"筑基期"，不能在本章无交代地变成"金丹期"。
+
+## 第三定律：发明需识别
+任何新出现的角色名、地名、物品名、功法名、势力名——如果首次出现，
+必须在描写中明确交代其身份/属性/用途，让读者知道这是新设定。
+不得出现"叶尘取出灵剑，施展玄阴掌"而前文从未交代过玄阴掌来源的情况。
+"""
 from app.models.volume import Volume
 
 
@@ -110,8 +131,9 @@ class AIService:
         previous_chapters: list[Chapter],
         vector_context: str = "",
         outline_detail: dict | None = None,
+        style_guidance: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Stream chapter generation with optional vector context."""
+        """Stream chapter generation with optional vector context and style guidance."""
         prompt = self._load_prompt("chapter")
 
         char_summary = "\n".join([
@@ -119,17 +141,65 @@ class AIService:
             for c in characters
         ])
 
+        # ── Phase 14.1: L0-L3 渐进式上下文压缩 ──────────────────────
         prev_summary = ""
-        if previous_chapters:
-            prev_summary = "\n".join([
-                f"第{c.chapter_number}章 {c.title}: {c.summary}"
-                for c in previous_chapters[-3:]  # Last 3 chapters context
-            ])
+        try:
+            from app.services.context_service import build_compressed_context
+            prev_summary = await build_compressed_context(
+                db, str(project.id), chapter_number, max_tokens=4000,
+            )
+        except Exception:
+            # 回退：简单的最近 3 章摘要
+            if previous_chapters:
+                prev_summary = "\n".join([
+                    f"第{c.chapter_number}章 {c.title}: {c.summary}"
+                    for c in previous_chapters[-3:]
+                ])
 
         # 将向量检索结果拼入 prompt 作为额外上下文
         extra_context = ""
         if vector_context:
             extra_context = f"\n\n### 相关历史内容（向量检索）\n以下是与本章相关的历史情节片段：\n{vector_context}"
+
+        # ── Phase 14.3：风格指导注入 ──────────────────────────────────
+        style_section = ""
+        if style_guidance:
+            style_section = (
+                "\n\n### 写作风格要求\n"
+                "基于历史章节检测，请注意以下写作风格问题：\n"
+                + "\n".join(f"- {s}" for s in style_guidance)
+                + "\n请尽量规避上述问题，让文风更自然、更像人类作家。"
+            )
+
+        # ── Phase 15.1：题材模板配置注入 ──────────────────────────────
+        template_section = ""
+        if project.template_id:
+            try:
+                t_result = await db.execute(
+                    select(GenreTemplate).where(GenreTemplate.id == project.template_id)
+                )
+                template = t_result.scalar_one_or_none()
+                if template and template.config:
+                    cfg = template.config
+                    style = cfg.get("style", {})
+                    pacing = cfg.get("pacing", {})
+                    review = cfg.get("review", {})
+                    parts = []
+                    if style.get("vocabulary"):
+                        parts.append(f"语言风格：{style['vocabulary']}")
+                    wc = pacing.get("typical_chapter_word_count", 2500)
+                    parts.append(f"本章建议字数：约 {wc} 字")
+                    if pacing.get("min_hook_per_chapter"):
+                        parts.append(f"本章至少包含 {pacing['min_hook_per_chapter']} 个钩子")
+                    if review.get("key_dimensions"):
+                        parts.append(f"审查重点维度：{', '.join(review['key_dimensions'])}")
+                    template_section = (
+                        "\n\n### 题材模板配置\n"
+                        f"题材：{template.name}\n"
+                        + "\n".join(parts)
+                    )
+            except Exception:
+                pass  # 模板加载失败不影响主流程
 
         # 构建本章细纲段落
         outline_section = ""
@@ -154,7 +224,7 @@ class AIService:
                 outline_section = "### 本章细纲（严格参照以下细纲写作）\n" + "\n".join(parts)
 
         messages = [
-            {"role": "system", "content": prompt["system"]},
+            {"role": "system", "content": prompt["system"] + ANTI_HALLUCINATION_LAWS},
             {"role": "user", "content": prompt["user"].format(
                 name=project.name,
                 genre=project.genre,
@@ -165,13 +235,22 @@ class AIService:
                 prev_summary=prev_summary,
                 extra_context=extra_context,
                 outline_section=outline_section,
+                style_section=style_section,
+                template_section=template_section,
             )},
         ]
 
         client = await self._build_client(db)
         try:
+            # 尝试流式生成
+            streamed = False
             async for chunk in await client.chat(messages, temperature=0.8, stream=True):
                 yield chunk
+                streamed = True
+            # 如果流式没输出任何内容，回退到非流式
+            if not streamed:
+                result = await client.chat(messages, temperature=0.8, stream=False)
+                yield str(result)
         finally:
             await client.close()
 
@@ -272,6 +351,24 @@ class AIService:
             return []
         except Exception:
             return []
+        finally:
+            await client.close()
+
+    async def de_ai_rewrite_stream(
+        self, db: AsyncSession, content: str
+    ) -> AsyncGenerator[str, None]:
+        """Stream de-AI rewrite of chapter content."""
+        prompt = self._load_prompt("de_ai")
+        messages = [
+            {"role": "system", "content": prompt["system"]},
+            {"role": "user", "content": prompt["user"].format(
+                original_content=content,
+            )},
+        ]
+        client = await self._build_client(db)
+        try:
+            async for chunk in await client.chat(messages, temperature=0.9, stream=True):
+                yield chunk
         finally:
             await client.close()
 

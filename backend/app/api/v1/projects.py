@@ -242,6 +242,17 @@ async def export_project(
     encoded_filename = urllib.parse.quote(filename)
     return StreamingResponse(
         iter([buf.getvalue()]),
-        media_type="application/x-zip-compressed",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{encoded_filename}"'},
     )
+
+
+# ── 设定一致性检查 ────────────────────────────────────────────────
+@router.post("/{project_id}/consistency/check")
+async def check_project_consistency(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """检查 story_core / characters / worldview 之间的设定冲突。"""
+    from app.services.consistency_checker import check_setting_consistency
+    return await check_setting_consistency(db, str(project_id))

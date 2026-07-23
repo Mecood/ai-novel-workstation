@@ -71,17 +71,30 @@ class AIClient:
             headers={"Authorization": f"Bearer {self._api_key}"},
         ) as resp:
             resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if line.startswith("data: "):
-                    data_str = line[6:]
-                    if data_str.strip() == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(data_str)
-                        if content := data["choices"][0].get("delta", {}).get("content"):
-                            yield content
-                    except json.JSONDecodeError:
+            buffer = ""
+            async for chunk in resp.aiter_bytes():
+                buffer += chunk.decode("utf-8", errors="replace")
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    line = line.strip()
+                    if not line:
                         continue
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str.strip() == "[DONE]":
+                            return
+                        try:
+                            data = json.loads(data_str)
+                            choices = data.get("choices", [])
+                            if not choices:
+                                continue
+                            delta = choices[0].get("delta", {})
+                            if choices[0].get("finish_reason") is not None:
+                                return
+                            if content := delta.get("content"):
+                                yield content
+                        except json.JSONDecodeError:
+                            continue
 
     async def embed(self, text: str, model: Optional[str] = None) -> list[float]:
         """Get text embedding vector."""

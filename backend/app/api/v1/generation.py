@@ -22,6 +22,25 @@ from app.services.ai_service import AIService
 from app.services.vector_search import VectorSearchService
 from app.services.version_service import version_service
 
+# ── Phase 7a：骨架强制检查 ──────────────────────────────────────────
+def _has_valid_skeleton(chapter: Chapter) -> tuple[bool, str]:
+    """检查章节是否有有效骨架。返回 (ok, message)。"""
+    skeleton = chapter.skeleton or {}
+    cbn = skeleton.get("cbn")
+    cpns = skeleton.get("cpns")
+    cen = skeleton.get("cen")
+    # 至少要有 CBN 的 5 节拍 或 任一非空骨架部分
+    cbn_ok = cbn and len(cbn.get("beats", [])) == 5
+    cpns_ok = cpns and cpns.get("promises")
+    cen_ok = cen and cen.get("events")
+    if cbn_ok or cpns_ok or cen_ok:
+        return True, ""
+    return False, (
+        "第 {num} 章未定义骨架。请先在写作工作区填写 CBN（5节拍）/ "
+        "CPNs（承诺清单）/ CEN（事件清单）后再生成章节。"
+    ).format(num=chapter.chapter_number)
+
+
 router = APIRouter(prefix="/projects/{project_id}")
 ai_service = AIService()
 vector_service = VectorSearchService(
@@ -350,12 +369,26 @@ async def generate_chapter(
             outline_detail = ch.outline_detail
             break
 
+    # ── Phase 7a：写前骨架检查 ────────────────────────────────────────
+    target_chapter = None
+    for ch in chapters:
+        if ch.chapter_number == next_number:
+            target_chapter = ch
+            break
+    if target_chapter is not None:
+        ok, msg = _has_valid_skeleton(target_chapter)
+        if not ok:
+            raise HTTPException(status_code=400, detail=msg)
+
     async def event_generator():
         full_content = ""
+        # 读取上一章检测到的风格指导
+        style_guidance = (project.context or {}).get("style_guidance")
         async for chunk in ai_service.generate_chapter_stream(
             db, project, next_number, story_core_text,
             worldview_text, characters, chapters, vector_context,
             outline_detail=outline_detail,
+            style_guidance=style_guidance,
         ):
             full_content += chunk
             yield {"data": json.dumps({"type": "chunk", "text": chunk})}
@@ -394,12 +427,44 @@ async def generate_chapter(
         db.add(chapter)
         await db.commit()
 
-        # Auto-extract knowledge from chapter content
+        # ── Phase 14.3：风格检测 → 存入 project 上下文 ──────────────
         try:
-            kn_items = await ai_service.extract_knowledge(db, full_content, "章节内容")
-            await _save_knowledge(db, project_id, kn_items, "chapter", str(chapter.id))
+            from app.services.ai_flavor_detector import detect_ai_flavor
+            flavor_result = detect_ai_flavor(full_content)
+            if flavor_result.get("score", 0) > 30:
+                style_guidance = flavor_result.get("style_guidance", [])
+                if not style_guidance:
+                    style_guidance = [
+                        i.get("suggestion", "") for i in flavor_result.get("issues", [])
+                        if i.get("severity") in ("severe", "medium")
+                    ][:5]
+                # 存到 project 的 context 字段供下一章使用
+                existing = project.context or {}
+                existing["style_guidance"] = style_guidance
+                existing["last_ai_flavor_score"] = flavor_result["score"]
+                project.context = existing
+                await db.commit()
         except Exception:
-            pass
+            pass  # 不影响主流程
+
+        # ── Phase 13.1：自动触发流水线 ──────────────────────────────
+        try:
+            from app.api.v1.auto_pipeline import _run_auto_pipeline
+            yield {"data": json.dumps({
+                "type": "info",
+                "message": "章节生成完成，开始自动流水线审查...",
+            })}
+            async for event in _run_auto_pipeline(
+                db, UUID(project_id), chapter.id,
+                skip_final_commit=True,
+            ):
+                yield {"data": json.dumps(event)}
+        except Exception as e:
+            # 流水线失败不影响章节保存
+            yield {"data": json.dumps({
+                "type": "pipeline_error",
+                "data": {"error": str(e)},
+            })}
 
         yield {"data": json.dumps({
             "type": "done",
@@ -682,6 +747,70 @@ async def regenerate_chapter(
         })}
 
     return EventSourceResponse(event_generator())
+
+
+# ── AI味检测 & 去AI味 ──
+
+
+@router.post("/chapters/{chapter_id}/detect-ai")
+async def detect_ai_flavor(
+    project_id: str,
+    chapter_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """检测章节的AI味程度，返回评分和问题列表。"""
+    from app.services.ai_flavor_detector import detect_ai_flavor as detect
+
+    result = await db.execute(
+        select(Chapter).where(Chapter.id == chapter_id, Chapter.project_id == project_id)
+    )
+    chapter = result.scalar_one_or_none()
+    if not chapter:
+        raise HTTPException(404, "Chapter not found")
+
+    chapter_text = chapter.content.get("text", "") if isinstance(chapter.content, dict) else str(chapter.content)
+    return detect(chapter_text)
+
+
+@router.post("/chapters/{chapter_id}/de-ai")
+async def de_ai_chapter(
+    project_id: str,
+    chapter_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """流式去AI味改写：读取章节内容 → AI改写 → 替换原文。"""
+    result = await db.execute(
+        select(Chapter).where(Chapter.id == chapter_id, Chapter.project_id == project_id)
+    )
+    chapter = result.scalar_one_or_none()
+    if not chapter:
+        raise HTTPException(404, "Chapter not found")
+
+    original_text = chapter.content.get("text", "") if isinstance(chapter.content, dict) else str(chapter.content)
+    if not original_text.strip():
+        raise HTTPException(400, "章节内容为空")
+
+    async def event_generator():
+        full_content = ""
+        async for chunk in ai_service.de_ai_rewrite_stream(db, original_text):
+            full_content += chunk
+            yield {"data": json.dumps({"type": "chunk", "text": chunk})}
+
+        # 替换章节内容（保存旧版本到历史）
+        await version_service.save_and_bump(db, chapter, based_on={})
+        chapter.content = {"text": full_content}
+        chapter.word_count = len(full_content)
+        await db.commit()
+
+        yield {"data": json.dumps({
+            "type": "done",
+            "chapter_id": str(chapter_id),
+            "chapter_number": chapter.chapter_number,
+            "word_count": len(full_content),
+        })}
+
+    return EventSourceResponse(event_generator())
+
 
 # ── Version Restore Endpoints ──
 

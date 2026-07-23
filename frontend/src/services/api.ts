@@ -47,6 +47,8 @@ const api = {
     request<T>('POST', path, body),
   put: <T>(path: string, body?: unknown) =>
     request<T>('PUT', path, body),
+  patch: <T>(path: string, body?: unknown) =>
+    request<T>('PATCH', path, body),
   delete: <T = void>(path: string) =>
     request<T>('DELETE', path),
 };
@@ -88,6 +90,8 @@ export const projectApi = {
     api.put<Project>(`/projects/${id}`, data),
   delete: (id: string) =>
     api.delete(`/projects/${id}`),
+  consistencyCheck: (id: string) =>
+    api.post<{ conflicts: any[]; healthy: boolean }>(`/projects/${id}/consistency/check`),
 };
 
 // === Worldview ===
@@ -388,7 +392,12 @@ export const aiApi = {
     api.post(`/projects/${projectId}/characters/generate`),
   generateOutline: (projectId: string) =>
     api.post(`/projects/${projectId}/outline/generate`),
-  generateChapter: (projectId: string, onChunk: (text: string) => void, onDone?: (data: any) => void) => {
+  generateChapter: (
+    projectId: string,
+    onChunk: (text: string) => void,
+    onDone?: (data: any) => void,
+    onPipelineEvent?: (event: any) => void,
+  ) => {
     return fetch(`${API_BASE}/projects/${projectId}/chapters/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -417,6 +426,9 @@ export const aiApi = {
                 onChunk(parsed.text);
               } else if (parsed.type === 'done' && onDone) {
                 onDone(parsed);
+              } else if (onPipelineEvent) {
+                // Phase 13.1：流水线事件（review_complete, extraction_complete, pipeline_complete 等）
+                onPipelineEvent(parsed);
               }
             } catch {
               // raw text fallback
@@ -427,12 +439,6 @@ export const aiApi = {
       }
     });
   },
-  checkConsistency: (projectId: string) =>
-    api.post<{ content: string }>(`/projects/${projectId}/consistency/check`),
-  generateOutline: (projectId: string) =>
-    api.post<{ content: string; volumes_created: number; chapters_created: number }>(
-      `/projects/${projectId}/outline/generate`
-    ),
 };
 
 // === Export ===
@@ -456,3 +462,140 @@ export const exportApi = {
 };
 
 export default api;
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 1-9: Review / Event / Debt / Contract / Pipeline / Search
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── Review ────────────────────────────────────────────────────────────
+export interface ReviewIssue {
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  dimension: string;
+  location: string;
+  description: string;
+  evidence: string;
+  fix_hint: string;
+  blocking: boolean;
+}
+export interface ReviewReport {
+  id: string; project_id: string; chapter_number: number;
+  overall_score: number; dimension_scores: Record<string, number>;
+  severity_counts: Record<string, number>; issues: ReviewIssue[];
+  blocking_count: number; summary: string; report_file?: string | null;
+  created_at?: string | null; tiered_results?: any;
+}
+export interface ReviewTrend { chapters: number[]; scores: number[]; }
+export interface DimensionTrend { chapters: number[]; dimensions: Record<string, (number | null)[]>; }
+export interface TierL1Check { name: string; label: string; passed: boolean; detail: string; value?: any; threshold?: string; invented?: string[]; existing?: string[]; covered?: number; total?: number; missed?: string[]; }
+export interface TierL1Result { status: 'PASS' | 'FAIL'; checks: TierL1Check[]; }
+export interface TierL2Result { dimension_scores: Record<string, number>; overall_score: number; issues: ReviewIssue[]; blocking_count: number; summary: string; }
+export interface AntiHallucinationCheck { law: string; label: string; passed: boolean; blocking: boolean; detail: string; deviation?: string | null; violations?: Array<{ rule: string; evidence: string; fix_hint: string; is_blocking: boolean; }>; invented_items?: string[]; unflagged?: string[]; }
+export interface TierL3Result { verdict: 'PASS' | 'REVISE' | 'REJECT'; summary: string; blocking_path?: string | null; l1_summary: string; l2_summary: string; l3_reasoning: string; anti_hallucination: AntiHallucinationCheck[]; }
+export interface TieredResults { l1: TierL1Result; l2: TierL2Result | null; l3: TierL3Result | null; }
+export const reviewApi = {
+  trigger: (projectId: string, chapterNumber: number, onChunk: (data: any) => void) => {
+    return fetch(`${API_BASE}/projects/${projectId}/chapters/${chapterNumber}/review`, { method: 'POST' }).then(async (r) => {
+      const reader = r.body?.getReader(); if (!reader) return;
+      const dec = new TextDecoder(); let buf = '';
+      while (true) {
+        const { done, value } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try { onChunk(JSON.parse(line.slice(6))); } catch { /* ignore */ }
+        }
+      }
+    });
+  },
+  getReport: (projectId: string, chapterNumber: number) => api.get<ReviewReport>(`/projects/${projectId}/chapters/${chapterNumber}/review`),
+  getTrend: (projectId: string) => api.get<ReviewTrend>(`/projects/${projectId}/reviews/trend`),
+  getDimensionTrend: (projectId: string) => api.get<DimensionTrend>(`/projects/${projectId}/reviews/dimension-trend`),
+};
+
+// ── Events ────────────────────────────────────────────────────────────
+export const EVENT_TYPE_LABELS: Record<string, string> = { plot: '剧情', character: '角色', worldview: '世界观', hook: '钩子', resolution: '收束', twist: '反转', reveal: '揭露', conflict: '冲突', emotion: '情感', milestone: '里程碑' };
+export interface StoryEvent { id: string; project_id: string; chapter_number: number; event_type: string; description: string; importance: number; involved_characters: string[]; related_events: string[]; created_at: string; [key: string]: any; }
+export interface EventTimeline { chapters: number[]; events: Record<string, StoryEvent[]>; }
+export const eventApi = {
+  list: (projectId: string, chapterNumber?: number) => api.get<StoryEvent[]>(`/projects/${projectId}/events${chapterNumber ? `?chapter=${chapterNumber}` : ''}`),
+  getTimeline: (projectId: string) => api.get<EventTimeline>(`/projects/${projectId}/events/timeline`),
+  extract: (projectId: string, chapterNumber: number) => api.post<{ events: StoryEvent[] }>(`/projects/${projectId}/events/extract/${chapterNumber}`),
+};
+
+// ── Debt ──────────────────────────────────────────────────────────────
+export const DEBT_TYPE_LABELS: Record<string, string> = { hook: '钩子', pacing: '节奏', payoff: '兑现', character: '角色', gap: '断更' };
+export const DEBT_STATUS_LABELS: Record<string, string> = { active: '活跃', accrued: '计息', overdue: '逾期', cancelled: '已取消' };
+export const CONTRACT_STATUS_LABELS: Record<string, string> = { pending: '待履行', fulfilled: '已履行', overdue: '逾期', cancelled: '已取消' };
+export const CONSTRAINT_TYPE_LABELS: Record<string, string> = { soft_hook_strength: '钩子强度', soft_micropayoff: '微兑现', soft_coolpoint: '爽点密度', soft_reading_desire: '阅读欲望' };
+export const RATIONALE_TYPE_LABELS: Record<string, string> = { transitional_setup: '过渡铺垫' };
+export const HOOK_TYPE_LABELS: Record<string, string> = { info_gap: '信息差', emotion: '情绪', action: '动作', mystery: '悬念', dialogue: '对话' };
+export const HOOK_STRENGTH_LABELS: Record<string, string> = { strong: '强', medium: '中', weak: '弱' };
+export interface DebtSummary { total_count: number; active_count: number; overdue_count: number; total_interest: number; top_debts: any[]; }
+export interface OverrideContract { id: string; chapter_number: number; required_nodes: any; optional_nodes: any; constraints: any; status: string; }
+export interface ReadingPowerTrend { chapters: number[]; series: { name: string; data: number[] }[]; }
+export interface ChaseDebt { id: string; chapter_number: number; debt_type: string; description: string; interest: number; status: string; created_at: string; }
+export const debtApi = {
+  getSummary: (projectId: string) => api.get<DebtSummary>(`/projects/${projectId}/debt/summary`),
+  getChapter: (projectId: string, chapterNumber: number) => api.get(`/projects/${projectId}/debt/chapter/${chapterNumber}`),
+  accrue: (projectId: string) => api.post(`/projects/${projectId}/debt/accrue`),
+  getReadingPower: (projectId: string) => api.get<ReadingPowerTrend>(`/projects/${projectId}/debt/reading-power`),
+  evaluateReadingPower: (projectId: string, chapterNumber: number) => api.post(`/projects/${projectId}/debt/chapters/${chapterNumber}/evaluate-reading-power`),
+  getContracts: (projectId: string) => api.get<{ items: OverrideContract[] }>(`/projects/${projectId}/debt/contracts`),
+  setContracts: (projectId: string, data: any) => api.post(`/projects/${projectId}/debt/contracts`, data),
+};
+
+// ── Contract ──────────────────────────────────────────────────────────
+export interface ChapterContract { id: string; project_id: string; chapter_number: number; required_nodes: any; optional_nodes: any; constraints: any; forbidden_zones: any; status: string; created_at: string; [key: string]: any; }
+export interface ChapterCommit { id: string; chapter_number: number; version: number; status: string; rejection_reasons: any; fulfillment_result: any; review_result: any; commit_version?: number; extraction_result?: any; created_at: string; }
+export const COMMIT_STATUS_LABELS: Record<string, string> = { accepted: '已通过', rejected: '已拒绝', pending: '待审核' };
+export interface ContractAllResponse { items: any[]; stats: { signed: number; submitted: number; accepted: number; rejected: number; }; }
+export interface ContractOverviewItem { chapter_number: number; contract_status: string; commit_status: string; }
+export const contractApi = {
+  sign: (projectId: string, chapterNumber: number) => api.post(`/projects/${projectId}/chapters/${chapterNumber}/contract/sign`),
+  get: (projectId: string, chapterNumber: number) => api.get(`/projects/${projectId}/chapters/${chapterNumber}/contract`),
+  commit: (projectId: string, chapterNumber: number) => api.post(`/projects/${projectId}/chapters/${chapterNumber}/commit`),
+  getCommit: (projectId: string, chapterNumber: number, version?: number) => api.get(`/projects/${projectId}/chapters/${chapterNumber}/commit${version ? `?version=${version}` : ''}`),
+  getCommitHistory: (projectId: string, chapterNumber: number) => api.get(`/projects/${projectId}/chapters/${chapterNumber}/commit/history`),
+  getAll: (projectId: string) => api.get<ContractAllResponse>(`/projects/${projectId}/contracts/all`),
+};
+
+// ── Pipeline ──────────────────────────────────────────────────────────
+export interface PipelineTransition { id: string; project_id: string; from_stage: string; to_stage: string; trigger: string; created_at: string; }
+export interface PipelineData { current_stage: string; stages: Record<string, { status: string; progress: number }>; }
+export interface PipelineStageEvent { type: string; data: any; }
+export interface PipelineProgress { stage: string; status: string; detail: any; }
+export interface ChapterSkeleton { cbn: any; cpns: any; cen: any; }
+export interface ReadingPowerEvalResult { reading_power: number; breakdown: any; [key: string]: any; }
+export const STAGE_LABELS: Record<string, string> = { init: '初始化', plan: '规划', write: '写作', review: '审查', commit: '提交' };
+export const pipelineApi = {
+  getStatus: (projectId: string) => api.get<PipelineData>(`/projects/${projectId}/pipeline`),
+  getTransitions: (projectId: string, limit?: number) => api.get<PipelineTransition[]>(`/projects/${projectId}/pipeline/transitions${limit ? `?limit=${limit}` : ''}`),
+  getAutoAdvance: (projectId: string) => api.get<{ auto_advance_enabled: boolean }>(`/projects/${projectId}/pipeline/auto-advance`),
+  setAutoAdvance: (projectId: string, enabled: boolean) => api.patch<{ auto_advance_enabled: boolean }>(`/projects/${projectId}/pipeline/auto-advance`, { auto_advance_enabled: enabled }),
+};
+export const autoPipelineApi = {
+  run: (projectId: string, chapterId: string, onChunk: (data: any) => void) => {
+    return fetch(`${API_BASE}/projects/${projectId}/chapters/${chapterId}/auto-pipeline`, { method: 'POST' }).then(async (r) => {
+      const reader = r.body?.getReader(); if (!reader) return;
+      const dec = new TextDecoder(); let buf = '';
+      while (true) {
+        const { done, value } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try { const d = JSON.parse(line.slice(6)); onChunk(d); } catch { /* ignore */ }
+        }
+      }
+    });
+  },
+};
+
+// ── Search ────────────────────────────────────────────────────────────
+export interface SearchResult { id: string; content: string; source: string; score: number; metadata: any; }
+export const searchApi = {
+  search: (projectId: string, query: string, topK?: number) => api.post<{ results: SearchResult[]; total: number }>(`/projects/${projectId}/search`, { query, top_k: topK || 5 }),
+  getContext: (projectId: string, topic: string) => api.get<{ context: string }>(`/projects/${projectId}/search/context`, { params: { topic } }),
+  indexContent: (projectId: string, contentType: string) => api.post<{ indexed: number; content_type: string }>(`/projects/${projectId}/search/index/${contentType}`),
+};

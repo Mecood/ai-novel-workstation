@@ -12,6 +12,7 @@ class ChapterCreate(BaseModel):
     outline_detail: Optional[Any] = None
     word_count: int = 0
     status: str = "draft"
+    skeleton: Optional[dict[str, Any]] = None
 
 
 class ChapterUpdate(BaseModel):
@@ -21,6 +22,7 @@ class ChapterUpdate(BaseModel):
     outline_detail: Optional[Any] = None
     word_count: Optional[int] = None
     status: Optional[str] = None
+    skeleton: Optional[dict[str, Any]] = None
 
 
 class ChapterResponse(BaseModel):
@@ -37,6 +39,7 @@ class ChapterResponse(BaseModel):
     stale: Optional[str] = Field(None, alias="_stale")
     based_on: Optional[Any] = Field(None, alias="_based_on")
     history: Optional[Any] = Field(None, alias="_history")
+    skeleton: Optional[dict[str, Any]] = Field(None, alias="_skeleton")
     created_at: datetime
     updated_at: datetime
 

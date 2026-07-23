@@ -17,6 +17,9 @@ import {
   BulbOutlined,
   ThunderboltOutlined,
   ArrowLeftOutlined,
+  SearchOutlined,
+  DollarOutlined,
+  FileProtectOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { projectApi, type Project } from '../../services/api';
@@ -36,6 +39,9 @@ const menuItems = [
   { key: 'knowledge', icon: <BookOutlined />, label: '知识库' },
   { key: 'prompt-templates', icon: <ThunderboltOutlined />, label: 'Prompt 模板' },
   { key: 'reader', icon: <ReadOutlined />, label: '阅读器' },
+  { key: 'search', icon: <SearchOutlined />, label: '项目搜索' },
+  { key: 'debt', icon: <DollarOutlined />, label: '伏笔债务' },
+  { key: 'contracts', icon: <FileProtectOutlined />, label: '合同管理' },
   { type: 'divider' as const },
   { key: 'settings', icon: <SettingOutlined />, label: '项目设置' },
 ];

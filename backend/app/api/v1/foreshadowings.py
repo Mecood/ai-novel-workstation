@@ -130,3 +130,28 @@ async def list_unresolved_foreshadowings(
         "overdue": overdue_count,
         "items": items,
     }
+
+
+# ── Phase 14.4: 伏笔 DAG ──────────────────────────────────────────────
+
+@router.get("/dag")
+async def get_foreshadowing_dag(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """返回伏笔 DAG 结构（nodes + edges）。"""
+    from app.services.foreshadowing_service import get_foreshadowing_dag
+    return await get_foreshadowing_dag(db, str(project_id))
+
+
+@router.post("/check-expired")
+async def check_expired_foreshadowings(
+    project_id: UUID,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """检查是否有伏笔到期未回收，自动标记 abandoned。"""
+    from app.services.foreshadowing_service import check_expired_foreshadowings
+    current_chapter = body.get("current_chapter", 1)
+    marked = await check_expired_foreshadowings(db, str(project_id), current_chapter)
+    return {"marked": marked, "count": len(marked)}

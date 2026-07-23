@@ -65,6 +65,12 @@ async def create_volume(
     db.add(volume)
     await db.commit()
     await db.refresh(volume)
+    try:
+        from app.services.pipeline_advancer import PipelineAdvancer
+        advancer = PipelineAdvancer(db)
+        await advancer.check_and_advance(str(project_id), trigger="volume_created")
+    except Exception:
+        pass
     return VolumeResponse.model_validate(volume)
 
 
@@ -90,6 +96,12 @@ async def update_volume(
 
     await db.commit()
     await db.refresh(volume)
+    try:
+        from app.services.pipeline_advancer import PipelineAdvancer
+        advancer = PipelineAdvancer(db)
+        await advancer.check_and_advance(str(project_id), trigger="volume_updated")
+    except Exception:
+        pass
     return VolumeResponse.model_validate(volume)
 
 

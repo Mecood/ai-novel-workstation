@@ -35,6 +35,12 @@ async def create_chapter(
     db.add(chapter)
     await db.commit()
     await db.refresh(chapter)
+    try:
+        from app.services.pipeline_advancer import PipelineAdvancer
+        advancer = PipelineAdvancer(db)
+        await advancer.check_and_advance(str(project_id), trigger="chapter_created")
+    except Exception:
+        pass
     return ChapterResponse.model_validate(chapter)
 
 
@@ -81,6 +87,12 @@ async def update_chapter(
 
     await db.commit()
     await db.refresh(chapter)
+    try:
+        from app.services.pipeline_advancer import PipelineAdvancer
+        advancer = PipelineAdvancer(db)
+        await advancer.check_and_advance(str(project_id), trigger="chapter_updated")
+    except Exception:
+        pass
     return ChapterResponse.model_validate(chapter)
 
 

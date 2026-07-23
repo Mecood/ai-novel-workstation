@@ -35,6 +35,12 @@ async def create_character(
     db.add(character)
     await db.commit()
     await db.refresh(character)
+    try:
+        from app.services.pipeline_advancer import PipelineAdvancer
+        advancer = PipelineAdvancer(db)
+        await advancer.check_and_advance(str(project_id), trigger="character_created")
+    except Exception:
+        pass
     return CharacterResponse.model_validate(character)
 
 

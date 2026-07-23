@@ -32,6 +32,12 @@ async def create_worldview(
     db.add(worldview)
     await db.commit()
     await db.refresh(worldview)
+    try:
+        from app.services.pipeline_advancer import PipelineAdvancer
+        advancer = PipelineAdvancer(db)
+        await advancer.check_and_advance(str(project_id), trigger="worldview_created")
+    except Exception:
+        pass
     return WorldviewResponse.model_validate(worldview)
 
 

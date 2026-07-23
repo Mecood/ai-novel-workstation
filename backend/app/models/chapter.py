@@ -21,6 +21,10 @@ class Chapter(Base):
     _based_on = Column(JSON, nullable=True, default=dict)
     _history = Column(JSON, nullable=True, default=list)
     _stale = Column(String(10), nullable=False, default="false")
+
+    # ── Phase 7a：CBN/CPNs/CEN 骨架 JSON ─────────────────────────
+    _skeleton = Column(JSON, nullable=True, default=dict)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -39,3 +43,12 @@ class Chapter(Base):
     @property
     def history(self):
         return self._history
+
+    @property
+    def skeleton(self) -> dict:
+        """返回骨架数据，兼容旧行：NULL 或 None → 空 dict。"""
+        return self._skeleton or {}
+
+    @skeleton.setter
+    def skeleton(self, value: dict | None) -> None:
+        self._skeleton = value

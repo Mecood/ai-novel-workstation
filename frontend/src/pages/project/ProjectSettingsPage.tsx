@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Card, Typography, Form, Select, InputNumber, Button, message, Spin } from 'antd';
+import {
+  Card, Typography, Form, Select, InputNumber, Button, message,
+  Spin, List, Tag, Alert, Result,
+} from 'antd';
 import AppLayout from '../../components/layout/AppLayout';
 import { projectApi } from '../../services/api';
 
@@ -18,11 +21,23 @@ const DEFAULT_SETTINGS: StoryCoreSettings = {
   temperature: 0.8,
 };
 
+interface ConsistencyConflict {
+  type: string;
+  severity: string;
+  detail: string;
+  sources: string[];
+}
+
 export default function ProjectSettingsPage() {
   const { id } = useParams<{ id: string }>();
   const [form] = Form.useForm<StoryCoreSettings>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [checkLoading, setCheckLoading] = useState(false);
+  const [checkResult, setCheckResult] = useState<{
+    conflicts: ConsistencyConflict[];
+    healthy: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -55,6 +70,41 @@ export default function ProjectSettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCheckConsistency = async () => {
+    if (!id) return;
+    setCheckLoading(true);
+    setCheckResult(null);
+    try {
+      const res = await projectApi.consistencyCheck(id);
+      setCheckResult(res.data);
+      if (res.data.healthy) {
+        message.success('设定一致性检查通过，未发现冲突');
+      } else {
+        message.warning(`发现 ${res.data.conflicts.length} 个设定冲突，请查看下方详情`);
+      }
+    } catch {
+      message.error('检查失败');
+    } finally {
+      setCheckLoading(false);
+    }
+  };
+
+  const severityTag = (severity: string) => {
+    if (severity === 'critical') {
+      return <Tag color="red">严重</Tag>;
+    }
+    return <Tag color="orange">警告</Tag>;
+  };
+
+  const typeLabel = (type: string) => {
+    const map: Record<string, string> = {
+      protagonist_name: '主角名字',
+      entity_conflict: '实体设定',
+      faction_name: '组织名称',
+    };
+    return map[type] || type;
   };
 
   return (
@@ -92,6 +142,58 @@ export default function ProjectSettingsPage() {
             </Form.Item>
           </Form>
         </Spin>
+      </Card>
+
+      {/* ── 设定一致性检查 ──────────────────────────────────────── */}
+      <Card
+        style={{ maxWidth: 600, marginTop: 16 }}
+        title="设定一致性检查"
+        extra={
+          <Button
+            type="primary"
+            ghost
+            icon={<span>🔍</span>}
+            loading={checkLoading}
+            onClick={handleCheckConsistency}
+          >
+            检查冲突
+          </Button>
+        }
+      >
+        {!checkResult ? (
+          <Alert
+            message="点击「检查冲突」对比故事核心、角色设定、世界观之间的关键信息，及时发现设定矛盾"
+            type="info"
+            showIcon
+            style={{ marginTop: 4 }}
+          />
+        ) : checkResult.healthy ? (
+          <Result
+            status="success"
+            title="通过"
+            subTitle="未发现设定冲突"
+          />
+        ) : (
+          <List
+            size="small"
+            dataSource={checkResult.conflicts}
+            locale={{ emptyText: '未检测到冲突' }}
+            renderItem={(c) => (
+              <List.Item>
+                <div style={{ width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <Tag color="blue">{typeLabel(c.type)}</Tag>
+                    {severityTag(c.severity)}
+                  </div>
+                  <div style={{ color: '#555' }}>{c.detail}</div>
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                    涉及字段：{c.sources.join(' / ')}
+                  </div>
+                </div>
+              </List.Item>
+            )}
+          />
+        )}
       </Card>
     </AppLayout>
   );
