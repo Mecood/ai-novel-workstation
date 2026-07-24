@@ -16,6 +16,8 @@ import DebtDashboard from './pages/project/DebtDashboard';
 import ContractsPage from './pages/project/ContractsPage';
 import ReaderPage from './pages/project/ReaderPage';
 import SearchPage from './pages/project/SearchPage';
+import CreativePage from './pages/project/CreativePage';
+import StylePage from './pages/project/StylePage';
 import ProjectSettingsPage from './pages/project/ProjectSettingsPage';
 import SettingsPage from './pages/SettingsPage';
 import AppLayout from './components/layout/AppLayout';
@@ -58,6 +60,8 @@ function App() {
           <Route path="/projects/:id/debt" element={<DebtDashboard />} />
           <Route path="/projects/:id/contracts" element={<ContractsPage />} />
           <Route path="/projects/:id/settings" element={<ProjectSettingsPage />} />
+          <Route path="/projects/:id/creative" element={<CreativePage />} />
+          <Route path="/projects/:id/style" element={<StylePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </BrowserRouter>

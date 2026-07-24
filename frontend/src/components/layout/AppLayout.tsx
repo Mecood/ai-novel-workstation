@@ -20,6 +20,7 @@ import {
   SearchOutlined,
   DollarOutlined,
   FileProtectOutlined,
+  RocketOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { projectApi, type Project } from '../../services/api';
@@ -42,6 +43,8 @@ const menuItems = [
   { key: 'search', icon: <SearchOutlined />, label: '项目搜索' },
   { key: 'debt', icon: <DollarOutlined />, label: '伏笔债务' },
   { key: 'contracts', icon: <FileProtectOutlined />, label: '合同管理' },
+  { key: 'creative', icon: <BulbOutlined />, label: '创意工坊' },
+  { key: 'style', icon: <RocketOutlined />, label: '风格工厂' },
   { type: 'divider' as const },
   { key: 'settings', icon: <SettingOutlined />, label: '项目设置' },
 ];
