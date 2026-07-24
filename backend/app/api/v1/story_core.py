@@ -76,6 +76,17 @@ async def update_story_core(
     project.story_core = data.model_dump()
     await db.commit()
     await db.refresh(project)
+
+    # 联动过期检测
+    try:
+        from app.services.stale_detection_service import check_and_mark_stale
+        await check_and_mark_stale(
+            db, str(project_id),
+            changed_entity="story_core",
+        )
+    except Exception:
+        pass
+
     return StoryCoreResponse(story_core=project.story_core)
 
 
