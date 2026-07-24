@@ -12,8 +12,8 @@ import {
   NodeIndexOutlined,
   RadarChartOutlined,
 } from '@ant-design/icons';
-import type { Project } from '../../services/api';
-import { projectApi, chapterApi, characterApi, foreshadowingApi, reviewApi } from '../../services/api';
+import type { Project } from '../../../services/api';
+import { projectApi, chapterApi, characterApi, foreshadowingApi, reviewApi } from '../../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 
