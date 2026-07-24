@@ -6,7 +6,7 @@ from uuid import UUID
 from app.core.database import get_db
 from app.models.project import Project
 from app.models.character import Character
-from app.schemas.character import CharacterCreate, CharacterResponse
+from app.schemas.character import CharacterCreate, CharacterResponse, CharacterUpdate
 
 router = APIRouter(prefix="/projects/{project_id}/characters", tags=["characters"])
 
@@ -73,4 +73,39 @@ async def get_character(
     character = result.scalar_one_or_none()
     if not character:
         raise HTTPException(status_code=404, detail="Character not found")
+    return CharacterResponse.model_validate(character)
+
+
+@router.put("/{character_id}", response_model=CharacterResponse)
+async def update_character(
+    project_id: UUID,
+    character_id: UUID,
+    data: CharacterUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Character).where(Character.id == character_id, Character.project_id == project_id)
+    )
+    character = result.scalar_one_or_none()
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(character, field, value)
+
+    await db.commit()
+    await db.refresh(character)
+
+    # 联动过期检测
+    try:
+        from app.services.stale_detection_service import check_and_mark_stale
+        await check_and_mark_stale(
+            db, str(project_id),
+            changed_entity="character",
+            changed_name=character.name,
+        )
+    except Exception:
+        pass
+
     return CharacterResponse.model_validate(character)

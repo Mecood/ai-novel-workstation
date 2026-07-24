@@ -56,3 +56,40 @@ async def list_worldviews(
     )
     worldviews = result.scalars().all()
     return [WorldviewResponse.model_validate(w) for w in worldviews]
+
+
+@router.put("/{worldview_id}", response_model=WorldviewResponse)
+async def update_worldview(
+    project_id: UUID,
+    worldview_id: UUID,
+    data: WorldviewCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    worldview = await db.execute(
+        select(Worldview).where(Worldview.id == worldview_id, Worldview.project_id == project_id)
+    ).scalar_one_or_none()
+    if not worldview:
+        raise HTTPException(status_code=404, detail="Worldview not found")
+
+    worldview.name = data.name
+    worldview.description = data.description
+    worldview.rules = data.rules
+    worldview.timeline = data.timeline
+
+    await db.commit()
+    await db.refresh(worldview)
+
+    # 联动过期检测
+    try:
+        from app.services.stale_detection_service import check_and_mark_stale
+        result = await check_and_mark_stale(
+            db, str(project_id),
+            changed_entity="worldview",
+            changed_name=data.name,
+        )
+        return {
+            "worldview": WorldviewResponse.model_validate(worldview).__dict__,
+            "stale_report": result,
+        }
+    except Exception:
+        return WorldviewResponse.model_validate(worldview)
