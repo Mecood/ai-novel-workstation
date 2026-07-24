@@ -917,3 +917,40 @@ async def restore_characters(
     await db.commit()
 
     return {"success": True, "version": version}
+
+
+# ── Context Agent：五段式写作任务书 ──────────────────────────────────
+
+
+@router.get("/chapters/{chapter_number}/task-book")
+async def get_writing_task_book(
+    project_id: str,
+    chapter_number: int,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """生成并返回指定章节的五段式写作任务书。"""
+    from app.services.context_agent_service import ContextAgentService
+
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    # 获取章节信息
+    result = await db.execute(
+        select(Chapter).where(
+            Chapter.project_id == project_id,
+            Chapter.chapter_number == chapter_number,
+        )
+    )
+    chapter = result.scalar_one_or_none()
+
+    agent = ContextAgentService(db, project_id, chapter_number)
+    task_book = await agent.build_writing_task_book()
+
+    return {
+        "project_id": project_id,
+        "chapter_number": chapter_number,
+        "chapter_title": chapter.title if chapter else "",
+        "chapter_status": chapter.status if chapter else "unknown",
+        "task_book": task_book,
+    }

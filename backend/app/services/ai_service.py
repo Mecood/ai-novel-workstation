@@ -276,6 +276,17 @@ class AIService:
         except Exception:
             pass  # 指南加载失败不影响主流程
 
+        # ── Context Agent：五段式写作任务书注入 ──────────────────────
+        task_book_section = ""
+        try:
+            from app.services.context_agent_service import ContextAgentService
+            context_agent = ContextAgentService(db, str(project.id), chapter_number)
+            task_book = await context_agent.build_writing_task_book()
+            if task_book:
+                task_book_section = "\n\n### 写作任务书\n" + task_book
+        except Exception:
+            pass  # 任务书加载失败不影响章节生成
+
         messages = [
             {"role": "system", "content": prompt["system"] + ANTI_HALLUCINATION_LAWS + "\n\n" + writing_guide_section},
             {"role": "user", "content": prompt["user"].format(

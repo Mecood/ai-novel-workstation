@@ -171,6 +171,19 @@ export default function WritingPage() {
             if (blocking > 0) {
               message.warning(`审查发现 ${blocking} 个阻断问题`);
             }
+          } else if (eventType === 'polish_complete') {
+            const status = event.data?.status;
+            const reason = event.data?.reason;
+            const steps = event.data?.steps_completed || 0;
+            if (status === 'skipped') {
+              setPipelineStage(`润色跳过 — ${reason}`);
+            } else if (status === 'error') {
+              setPipelineStage(`润色失败 — ${event.data?.error}`);
+              message.warning(`润色失败：${event.data?.error}`);
+            } else {
+              setPipelineStage(`润色完成 — ${steps} 步`);
+              message.success(`润色完成（${steps} 步）`);
+            }
           } else if (eventType === 'extraction_complete') {
             const count = event.data?.event_count || 0;
             setPipelineStage(`提取完成 — ${count} 个事件`);

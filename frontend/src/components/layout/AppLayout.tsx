@@ -21,6 +21,8 @@ import {
   DollarOutlined,
   FileProtectOutlined,
   RocketOutlined,
+  SolutionOutlined,
+  SnippetsOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { projectApi, type Project } from '../../services/api';
@@ -45,6 +47,9 @@ const menuItems = [
   { key: 'contracts', icon: <FileProtectOutlined />, label: '合同管理' },
   { key: 'creative', icon: <BulbOutlined />, label: '创意工坊' },
   { key: 'style', icon: <RocketOutlined />, label: '风格工厂' },
+  { key: 'task-book', icon: <SolutionOutlined />, label: '写作任务书' },
+  { key: 'deconstruction', icon: <SnippetsOutlined />, label: '参考书拆解' },
+  { key: 'init-wizard', icon: <RocketOutlined />, label: '初始化向导' },
   { type: 'divider' as const },
   { key: 'settings', icon: <SettingOutlined />, label: '项目设置' },
 ];

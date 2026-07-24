@@ -1,5 +1,5 @@
 """Phase 7a：全自动串联流水线（SSE 流）
-串联 review_service → extraction_service → debt_service.evaluate_chapter_reading_power() → contract_service.commit_chapter()。
+串联 review_service → polish_service → extraction_service → debt_service.evaluate_chapter_reading_power() → contract_service.commit_chapter()。
 以 SSE 流逐阶段推送进度，每步失败跳过继续。
 
 关键设计：每个阶段使用独立 AsyncSession，避免一个阶段失败导致整个 session
@@ -26,13 +26,15 @@ from app.services.review_service import ReviewService
 from app.services.extraction_service import ExtractionService
 from app.services.debt_service import DebtService
 from app.services.contract_service import ContractService
+from app.services.polish_service import PolishService
 
 router = APIRouter(tags=["auto-pipeline"])
 
 # ── 流水线阶段枚举 ────────────────────────────────────────────────────
-PIPELINE_STAGES = ["review", "extraction", "debt", "commit"]
+PIPELINE_STAGES = ["review", "polish", "extraction", "debt", "commit"]
 STAGE_LABELS: dict[str, str] = {
     "review": "审查",
+    "polish": "润色",
     "extraction": "提取",
     "debt": "评估",
     "commit": "提交",
@@ -99,6 +101,7 @@ async def _run_auto_pipeline(
     # 依赖注入
     ai_service = AIService()
     review_service = ReviewService(ai_service)
+    polish_service = PolishService(ai_service)
     extraction_service = ExtractionService(ai_service)
     debt_service = DebtService(ai_service)
     contract_service = ContractService(ai_service)
@@ -153,7 +156,56 @@ async def _run_auto_pipeline(
         yield {"type": "progress", "stage": "review", "status": "done",
                "detail": {"score": report.get("overall_score") if report else None}}
 
-        # ── Stage 2: 提取 ────────────────────────────────────────
+        # ── Stage 2: 润色 ────────────────────────────────
+        yield {"type": "progress", "stage": "polish", "status": "running",
+               "detail": {"label": STAGE_LABELS["polish"]}}
+        polish_result: dict | None = None
+        try:
+            s = _new_stage_session()
+            try:
+                # 只在 review 成功且有 issues 时才润色
+                if report and report.get("blocking_count", 0) > 0:
+                    polish_output = await polish_service.polish_chapter(
+                        s, project, chapter,
+                        review_result=dict(report),
+                    )
+                    # 保存润色后的正文回数据库
+                    polished_text = polish_output.polished_content
+                    chapter.content = {"text": polished_text}  # type: ignore[assignment]
+                    chapter.word_count = len(polished_text)  # type: ignore[assignment]
+                    stage_results["polish"] = {
+                        "status": "ok",
+                        "result": {
+                            "status": polish_output.report.get("status"),
+                            "steps": polish_output.report.get("steps", {}),
+                        },
+                    }
+                    yield {"type": "polish_complete", "data": {
+                        "status": polish_output.report.get("status"),
+                        "steps_completed": len(polish_output.report.get("steps", {})),
+                    }}
+                else:
+                    stage_results["polish"] = {"status": "skipped",
+                                               "reason": "无关键问题需润色"}
+                    yield {"type": "polish_complete", "data": {
+                        "status": "skipped",
+                        "reason": "无关键问题需润色",
+                    }}
+                await s.commit()
+            except Exception:
+                await s.rollback()
+                raise
+            finally:
+                await s.close()
+            polish_result = stage_results.get("polish", {}).get("result")
+        except Exception as e:
+            stage_results["polish"] = {"status": "error", "error": str(e)}
+            yield {"type": "polish_complete", "data": {"error": str(e)}}
+
+        yield {"type": "progress", "stage": "polish", "status": "done",
+               "detail": {"changes": polish_result.get("steps") if polish_result else None}}
+
+        # ── Stage 3: 提取 ────────────────────────────────────────
         yield {"type": "progress", "stage": "extraction", "status": "running",
                "detail": {"label": STAGE_LABELS["extraction"]}}
         extract_result: dict | None = None

@@ -567,7 +567,7 @@ export interface PipelineStageEvent { type: string; data: any; }
 export interface PipelineProgress { stage: string; status: string; detail: any; }
 export interface ChapterSkeleton { cbn: any; cpns: any; cen: any; }
 export interface ReadingPowerEvalResult { reading_power: number; breakdown: any; [key: string]: any; }
-export const STAGE_LABELS: Record<string, string> = { init: '初始化', plan: '规划', write: '写作', review: '审查', commit: '提交' };
+export const STAGE_LABELS: Record<string, string> = { init: '初始化', plan: '规划', write: '写作', review: '审查', polish: '润色', commit: '提交' };
 export const pipelineApi = {
   getStatus: (projectId: string) => api.get<PipelineData>(`/projects/${projectId}/pipeline`),
   getTransitions: (projectId: string, limit?: number) => api.get<PipelineTransition[]>(`/projects/${projectId}/pipeline/transitions${limit ? `?limit=${limit}` : ''}`),
