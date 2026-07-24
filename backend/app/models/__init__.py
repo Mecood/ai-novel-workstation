@@ -17,6 +17,7 @@ from app.models.chapter_contract import ChapterContract, ContractStatus as Chapt
 from app.models.chapter_commit import ChapterCommit, CommitStatus
 from app.models.memory_item import MemoryItem
 from app.models.deconstruction_history import DeconstructionHistory
+from app.models.contract_audit_log import ContractAuditLog
 
 __all__ = [
     "Project", "Worldview", "Character", "Chapter", "Foreshadowing", "Knowledge",

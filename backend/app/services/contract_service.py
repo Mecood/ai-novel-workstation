@@ -24,6 +24,7 @@ from app.models.project import Project
 from app.models.chapter import Chapter
 from app.models.chapter_contract import ChapterContract, ContractStatus
 from app.models.chapter_commit import ChapterCommit, CommitStatus
+from app.models.contract_audit_log import ContractAuditLog
 from app.models.review_report import ReviewReport
 from app.models.story_event import StoryEvent
 
@@ -81,6 +82,19 @@ class ContractService:
             existing.signed_at = datetime.now(timezone.utc)
             existing.chapter_id = chapter.id
             await db.flush()
+            await self._log_audit(
+                db, str(project.id), chapter.chapter_number,
+                "UPDATE", existing,
+                old_status=ContractStatus.DRAFT.value,
+                new_status=ContractStatus.SIGNED.value,
+                old_nodes=contract_data.get("required_nodes", []),
+                new_nodes=contract_data.get("required_nodes", []),
+                old_zones=contract_data.get("forbidden_zones", []),
+                new_zones=contract_data.get("forbidden_zones", []),
+                old_constraints=contract_data.get("constraints", []),
+                new_constraints=contract_data.get("constraints", []),
+                note="重新签署（替换旧契约）",
+            )
             return self._contract_to_dict(existing)
         else:
             # 创建新契约
@@ -98,6 +112,16 @@ class ContractService:
             )
             db.add(contract)
             await db.flush()
+            await self._log_audit(
+                db, str(project.id), chapter.chapter_number,
+                "CREATE", contract,
+                old_status=None,
+                new_status=ContractStatus.SIGNED.value,
+                new_nodes=contract_data.get("required_nodes", []),
+                new_zones=contract_data.get("forbidden_zones", []),
+                new_constraints=contract_data.get("constraints", []),
+                note="新建契约",
+            )
             return self._contract_to_dict(contract)
 
     # ── 2) 获取契约 ──────────────────────────────────────────────────────
@@ -277,6 +301,26 @@ class ContractService:
         )
         db.add(commit)
         await db.flush()
+
+        # 审计日志
+        old_contract_status = contract.status.value if contract else None
+        new_contract_status = (ContractStatus.FULFILLED.value if commit_status == CommitStatus.ACCEPTED
+                              else ContractStatus.REJECTED.value)
+        await self._log_audit(
+            db, project_id_str, ch_num,
+            "COMMIT", contract,
+            old_status=old_contract_status,
+            new_status=new_contract_status,
+            detail={
+                "commit_version": next_version,
+                "commit_status": commit_status.value,
+                "blocking_count": blocking_count,
+                "missed_node_count": len(missed_nodes),
+                "forbidden_violation_count": len(forbidden_violations),
+                "rejection_reasons": rejection_reasons,
+            },
+            note=f"章节提交——版本{next_version}——{commit_status.value}",
+        )
 
         return self._commit_to_dict(commit)
 
@@ -578,6 +622,73 @@ class ContractService:
                 "reason": str(z.get("reason", ""))[:200],
             })
         return out
+
+    # ── Audit helpers ────────────────────────────────────────────────
+
+    async def _log_audit(
+        self,
+        db: AsyncSession,
+        project_id: str | uuid.UUID,
+        chapter_number: int,
+        action: str,
+        contract: ChapterContract | None,
+        *,
+        old_status: str | None = None,
+        new_status: str | None = None,
+        old_nodes: list | None = None,
+        new_nodes: list | None = None,
+        old_zones: list | None = None,
+        new_zones: list | None = None,
+        old_constraints: list | None = None,
+        new_constraints: list | None = None,
+        detail: dict | None = None,
+        note: str | None = None,
+        actor: str = "auto_pipeline",
+    ) -> None:
+        """Append-only 审计日志写入。不修改 contract 本身。"""
+        try:
+            log = ContractAuditLog(
+                project_id=uuid.UUID(project_id) if isinstance(project_id, str) else project_id,
+                chapter_number=chapter_number,
+                contract_id=contract.id if contract else None,
+                action=action,
+                actor=actor,
+                old_status=old_status,
+                old_required_nodes=old_nodes,
+                old_forbidden_zones=old_zones,
+                old_constraints=old_constraints,
+                new_status=new_status,
+                new_required_nodes=new_nodes,
+                new_forbidden_zones=new_zones,
+                new_constraints=new_constraints,
+                detail=detail,
+                note=note,
+            )
+            db.add(log)
+            await db.flush()
+        except Exception:
+            # 审计日志写入失败不阻断主流程（降级容忍）
+            pass
+
+    async def get_audit_logs(
+        self,
+        db: AsyncSession,
+        project_id: str | uuid.UUID,
+        chapter_number: int | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """获取审计日志。"""
+        q = select(ContractAuditLog).where(
+            ContractAuditLog.project_id == (
+                uuid.UUID(project_id) if isinstance(project_id, str) else project_id
+            )
+        )
+        if chapter_number is not None:
+            q = q.where(ContractAuditLog.chapter_number == chapter_number)
+        q = q.order_by(ContractAuditLog.created_at.desc()).limit(limit)
+        result = await db.execute(q)
+        logs = result.scalars().all()
+        return [l.to_dict() for l in logs]
 
     async def _call_llm_check_fulfillment(
         self,

@@ -150,6 +150,27 @@ async def get_commit_history(
     )
 
 
+# ── 6) 审计日志 ───────────────────────────────────────────────────
+@router.get("/contract/audit")
+async def get_audit_logs(
+    project_id: UUID,
+    chapter_number: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    获取章节契约审计日志（append-only）。
+    记录所有契约变更：CREATE / UPDATE / STATUS_CHANGE / COMMIT。
+    """
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    return await contract_service.get_audit_logs(
+        db, str(project_id), chapter_number, limit=limit
+    )
+
+
 # ════════════════════════════════════════════════════════════════════════
 # 项目级路由：全局契约概览
 # ════════════════════════════════════════════════════════════════════════
