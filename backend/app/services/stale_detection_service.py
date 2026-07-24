@@ -30,8 +30,23 @@ def _extract_text(obj: Any) -> str:
     if isinstance(obj, str):
         return obj
     if isinstance(obj, dict):
+        # Chapter.content 通常是 {'text': '正文...'}
+        if 'text' in obj and isinstance(obj['text'], str):
+            return obj['text']
         return json.dumps(obj, ensure_ascii=False)
     return str(obj)
+
+
+def _chapter_text(chapter: Any) -> str:
+    """安全提取章节正文文本（可能是 str 或 dict）。"""
+    c = chapter.content
+    if c is None:
+        return ""
+    if isinstance(c, str):
+        return c
+    if isinstance(c, dict) and 'text' in c and isinstance(c['text'], str):
+        return c['text']
+    return json.dumps(c, ensure_ascii=False)
 
 
 async def check_and_mark_stale(
@@ -115,30 +130,25 @@ async def check_and_mark_stale(
 
     # 4) 检查每一章——简单启发式：把章节内容拍平，看是否含有与最新设定
     #    不一致的关键词。更精确的比对留给 LLM。
-    affected_chapters: list[dict] = []
-    affected_contracts: list[dict] = []
     for ch in chapters:
-        content = (ch.content or "").lower()
-        # 检查：章节内是否引用了旧的角色名/旧世界观关键词
-        # 这里先做基础标记——标记所有有章节内容 + 已签合同为"待审查"
-        # 精确冲突留给前端一致性检查模块。
+        content = _chapter_text(ch).lower()
         if ch.chapter_number:
-            affected_chapters.append({
-                "chapter_number": ch.chapter_number,
+            result["affected_chapters"].append({
+                "chapter_number": int(ch.chapter_number),
                 "chapter_id": str(ch.id),
             })
 
     for ct in contracts:
         if ct.chapter_number:
-            affected_contracts.append({
-                "chapter_number": ct.chapter_number,
+            result["affected_contracts"].append({
+                "chapter_number": int(ct.chapter_number),
                 "id": str(ct.id),
             })
 
     # 5) 标记受影响章节和合同
     for ch in chapters:
         ch._stale = "true"
-        ch._version = (ch._version or 0) + 1
+        ch._version = int(ch._version or 0) + 1
         if ch._history is None:
             ch._history = []
         ch._history.append({
@@ -148,15 +158,15 @@ async def check_and_mark_stale(
 
     for ct in contracts:
         ct._stale = "true"
-        ct._version = (ct._version or 0) + 1
+        ct._version = int(ct._version or 0) + 1
 
     await db.flush()
 
-    if affected_chapters or affected_contracts:
-        ch_list = ", ".join(f"第{c['chapter_number']}章" for c in affected_chapters)
+    if result["affected_chapters"] or result["affected_contracts"]:
+        ch_list = ", ".join(f"第{c['chapter_number']}章" for c in result["affected_chapters"])
         result["message"] = (
             f"您修改了「{changed_name or changed_entity}」，"
-            f"第{ch_list}的章节/合同可能需要重新审查"
+            f"{ch_list}的章节/合同可能需要重新审查"
         )
     else:
         result["message"] = "修改已完成，无受影响章节"
