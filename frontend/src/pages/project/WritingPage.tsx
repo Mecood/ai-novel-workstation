@@ -187,6 +187,20 @@ export default function WritingPage() {
           } else if (eventType === 'extraction_complete') {
             const count = event.data?.event_count || 0;
             setPipelineStage(`提取完成 — ${count} 个事件`);
+          } else if (eventType === 'validation_complete') {
+            const passed = event.data?.passed;
+            const blocking = event.data?.blocking_count || 0;
+            const warning = event.data?.warning_count || 0;
+            if (passed) {
+              setPipelineStage(`校验通过 — ${warning} 个警告`);
+              message.success(`写后校验通过`);
+            } else {
+              setPipelineStage(`校验失败 — ${blocking} 个阻断, ${warning} 个警告`);
+              message.error(`写后校验阻断提交：${event.data?.summary}`);
+            }
+          } else if (eventType === 'commit_blocked') {
+            setPipelineStage(`提交阻断 — ${event.data?.reason}`);
+            message.error(`提交被阻断：${event.data?.summary}`);
           } else if (eventType === 'debt_complete') {
             const score = event.data?.reading_power_score;
             setPipelineStage(`债务评估完成 — 追读力 ${score}`);

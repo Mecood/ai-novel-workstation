@@ -27,14 +27,16 @@ from app.services.extraction_service import ExtractionService
 from app.services.debt_service import DebtService
 from app.services.contract_service import ContractService
 from app.services.polish_service import PolishService
+from app.services.post_validation_service import PostValidationService
 
 router = APIRouter(tags=["auto-pipeline"])
 
 # ── 流水线阶段枚举 ────────────────────────────────────────────────────
-PIPELINE_STAGES = ["review", "polish", "extraction", "debt", "commit"]
+PIPELINE_STAGES = ["review", "polish", "validation", "extraction", "debt", "commit"]
 STAGE_LABELS: dict[str, str] = {
     "review": "审查",
     "polish": "润色",
+    "validation": "校验",
     "extraction": "提取",
     "debt": "评估",
     "commit": "提交",
@@ -102,6 +104,7 @@ async def _run_auto_pipeline(
     ai_service = AIService()
     review_service = ReviewService(ai_service)
     polish_service = PolishService(ai_service)
+    validation_service = PostValidationService(ai_service)
     extraction_service = ExtractionService(ai_service)
     debt_service = DebtService(ai_service)
     contract_service = ContractService(ai_service)
@@ -205,6 +208,39 @@ async def _run_auto_pipeline(
         yield {"type": "progress", "stage": "polish", "status": "done",
                "detail": {"changes": polish_result.get("steps") if polish_result else None}}
 
+        # ── Stage 2.5: 写后强制校验 ──────────────────────────────
+        yield {"type": "progress", "stage": "validation", "status": "running",
+               "detail": {"label": STAGE_LABELS["validation"]}}
+        validation_report = None
+        validation_block_commit = False
+        try:
+            s = _new_stage_session()
+            try:
+                validation_report = await validation_service.validate_chapter(s, project, chapter)
+                await s.commit()
+            except Exception:
+                await s.rollback()
+                raise
+            finally:
+                await s.close()
+            stage_results["validation"] = {
+                "status": "ok" if validation_report.passed else "failed",
+                "result": validation_report.to_dict(),
+            }
+            validation_block_commit = validation_report.blocking_count > 0
+            yield {"type": "validation_complete", "data": {
+                "passed": validation_report.passed,
+                "blocking_count": validation_report.blocking_count,
+                "warning_count": validation_report.warning_count,
+                "summary": validation_report.summary,
+            }}
+        except Exception as e:
+            stage_results["validation"] = {"status": "error", "error": str(e)}
+            yield {"type": "validation_complete", "data": {"error": str(e)}}
+
+        yield {"type": "progress", "stage": "validation", "status": "done",
+               "detail": {"passed": validation_report.passed if validation_report else None}}
+
         # ── Stage 3: 提取 ────────────────────────────────────────
         yield {"type": "progress", "stage": "extraction", "status": "running",
                "detail": {"label": STAGE_LABELS["extraction"]}}
@@ -259,28 +295,47 @@ async def _run_auto_pipeline(
                "detail": {"score": debt_result.get("reading_power_score") if debt_result else None}}
 
         # ── Stage 4: 提交检查 ────────────────────────────────────
-        yield {"type": "progress", "stage": "commit", "status": "running",
-               "detail": {"label": STAGE_LABELS["commit"]}}
-        commit_result: dict | None = None
-        try:
-            s = _new_stage_session()
+        if validation_block_commit:
+            # 校验有 blocking 失败 → 跳过提交，推阻断事件
+            stage_results["commit"] = {
+                "status": "blocked",
+                "reason": "validation_block",
+                "detail": (
+                    f"写后校验发现 {validation_report.blocking_count} 个 blocking 问题，"
+                    f"阻断提交：{validation_report.summary}"
+                ),
+            }
+            yield {"type": "commit_blocked", "data": {
+                "reason": "validation_block",
+                "blocking_count": validation_report.blocking_count,
+                "summary": validation_report.summary,
+                "report": validation_report.to_dict() if validation_report else None,
+            }}
+            yield {"type": "progress", "stage": "commit", "status": "done",
+                   "detail": {"status": "blocked"}}
+        else:
+            yield {"type": "progress", "stage": "commit", "status": "running",
+                   "detail": {"label": STAGE_LABELS["commit"]}}
+            commit_result: dict | None = None
             try:
-                commit_result = await contract_service.commit_chapter(s, project, chapter)
-                if not skip_final_commit:
-                    await s.commit()
-            except Exception:
-                await s.rollback()
-                raise
-            finally:
-                await s.close()
-            stage_results["commit"] = {"status": "ok", "result": commit_result}
-            yield {"type": "commit_complete", "data": {"status": commit_result.get("status")}}
-        except Exception as e:
-            stage_results["commit"] = {"status": "error", "error": str(e)}
-            yield {"type": "commit_complete", "data": {"error": str(e)}}
+                s = _new_stage_session()
+                try:
+                    commit_result = await contract_service.commit_chapter(s, project, chapter)
+                    if not skip_final_commit:
+                        await s.commit()
+                except Exception:
+                    await s.rollback()
+                    raise
+                finally:
+                    await s.close()
+                stage_results["commit"] = {"status": "ok", "result": commit_result}
+                yield {"type": "commit_complete", "data": {"status": commit_result.get("status")}}
+            except Exception as e:
+                stage_results["commit"] = {"status": "error", "error": str(e)}
+                yield {"type": "commit_complete", "data": {"error": str(e)}}
 
-        yield {"type": "progress", "stage": "commit", "status": "done",
-               "detail": {"status": commit_result.get("status") if commit_result else None}}
+            yield {"type": "progress", "stage": "commit", "status": "done",
+                   "detail": {"status": commit_result.get("status") if commit_result else None}}
 
         # ── 触发阶段推进 ───────────────────────────────────────────
         try:
