@@ -518,9 +518,30 @@ export const EVENT_TYPE_LABELS: Record<string, string> = { plot: '剧情', chara
 export interface StoryEvent { id: string; project_id: string; chapter_number: number; event_type: string; description: string; importance: number; involved_characters: string[]; related_events: string[]; created_at: string; [key: string]: any; }
 export interface EventTimeline { chapters: number[]; events: Record<string, StoryEvent[]>; }
 export const eventApi = {
-  list: (projectId: string, chapterNumber?: number) => api.get<StoryEvent[]>(`/projects/${projectId}/events${chapterNumber ? `?chapter=${chapterNumber}` : ''}`),
-  getTimeline: (projectId: string) => api.get<EventTimeline>(`/projects/${projectId}/events/timeline`),
+  list: (projectId: string, params?: { event_type?: string }) =>
+    api.get<StoryEvent[]>(`/projects/${projectId}/events${params ? `?event_type=${params.event_type}` : ''}`),
+  getTimeline: (projectId: string, params?: { event_type?: string }) =>
+    api.get<EventTimeline>(`/projects/${projectId}/events/timeline${params ? `?event_type=${params.event_type}` : ''}`),
   extract: (projectId: string, chapterNumber: number) => api.post<{ events: StoryEvent[] }>(`/projects/${projectId}/events/extract/${chapterNumber}`),
+  triggerExtract: (projectId: string, chapterNumber: number, onSSE: (data: any) => void) => {
+    return fetch(`${API_BASE}/projects/${projectId}/events/${chapterNumber}/extract`, { method: 'POST' })
+      .then(async (r) => {
+        const reader = r.body?.getReader(); if (!reader) throw new Error('No reader');
+        const decoder = new TextDecoder(); let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read(); if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n'); buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try { onSSE(JSON.parse(line.slice(6))); } catch {}
+            }
+          }
+        }
+      });
+  },
+  getRelationships: (projectId: string) =>
+    api.get<{ nodes: { id: string; name: string; role_type: string }[]; edges: { source_id: string; target_id: string; source_name: string; target_name: string; relationship: string; chapter: number; description: string; created_at: string }[]; timeline: { chapter: number; event: string; description: string; entities: string[]; created_at: string }[]; node_count: number; edge_count: number }>(`/projects/${projectId}/events/relationships`),
 };
 
 // ── Debt ──────────────────────────────────────────────────────────────

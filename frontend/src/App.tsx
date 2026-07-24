@@ -21,6 +21,7 @@ import StylePage from './pages/project/StylePage';
 import ContextAgentView from './pages/project/ContextAgentView';
 import DeconstructionPage from './pages/project/DeconstructionPage';
 import InitWizardPage from './pages/project/InitWizardPage';
+import RelationshipPage from './pages/project/RelationshipPage';
 import ProjectSettingsPage from './pages/project/ProjectSettingsPage';
 import SettingsPage from './pages/SettingsPage';
 import AppLayout from './components/layout/AppLayout';
@@ -67,6 +68,7 @@ function App() {
           <Route path="/projects/:id/style" element={<StylePage />} />
           <Route path="/projects/:id/task-book" element={<ContextAgentView />} />
           <Route path="/projects/:id/deconstruction" element={<DeconstructionPage />} />
+          <Route path="/projects/:id/relationships" element={<RelationshipPage />} />
           <Route path="/projects/:id/init-wizard" element={<InitWizardPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

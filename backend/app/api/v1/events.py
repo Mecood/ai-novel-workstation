@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.project import Project
 from app.models.chapter import Chapter
+from app.models.character import Character
+from app.models.story_event import StoryEvent
 from app.services.ai_service import AIService
 from app.services.extraction_service import ExtractionService
 
@@ -112,3 +114,97 @@ async def get_character_events(
         offset=offset,
         limit=limit,
     )
+
+
+# ── 5) 关系图谱数据（P2） ─────────────────────────────────────────────
+@router.get("/relationships")
+async def get_relationships(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    关系图谱数据：从 relationship_changed 事件构建角色关系时间线。
+
+    返回结构：
+    {
+        "nodes": [{"id": "uuid", "name": "林渊", "role_type": "主角"}],
+        "edges": [
+            {
+                "source_id": "uuid_a", "target_id": "uuid_b",
+                "source_name": "林渊", "target_name": "苏瑶",
+                "relationship": "师徒",
+                "chapter": 5,
+                "description": "苏瑶收林渊为徒",
+                "created_at": "..."
+            }
+        ],
+        "timeline": [
+            {"chapter": 3, "event": "林渊与苏瑶相遇", "description": "..."}
+        ]
+    }
+    """
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    project_id_str = str(project_id)
+
+    # 1) 取所有角色 → 节点列表
+    chars = (await db.execute(
+        select(Character).where(Character.project_id == project_id)
+    )).scalars().all()
+    nodes = [
+        {"id": str(c.id), "name": c.name, "role_type": c.role_type}
+        for c in chars
+    ]
+
+    # 2) 取所有 relationship_changed 事件
+    rel_events = (await db.execute(
+        select(StoryEvent)
+        .where(
+            StoryEvent.project_id == project_id,
+            StoryEvent.event_type == "relationship_changed",
+        )
+        .order_by(StoryEvent.chapter_number, StoryEvent.order)
+    )).scalars().all()
+
+    # 3) 构建 edges：每个事件的 entities 两两配对
+    char_id_set = {str(c.id) for c in chars}
+    edges = []
+    timeline = []
+    for ev in rel_events:
+        entities = ev.entities or []
+        char_ids = ev.character_ids or []
+        # 优先用 character_ids；退回到 entities
+        involved_ids = [c for c in char_ids if c in char_id_set] or \
+                       [str(c.id) for c in chars if c.name in entities]
+        if len(involved_ids) >= 2:
+            for i, src in enumerate(involved_ids[:2]):
+                tgt = involved_ids[i + 1]
+                if src == tgt:
+                    continue
+                edges.append({
+                    "source_id": src,
+                    "target_id": tgt,
+                    "source_name": next((n["name"] for n in nodes if n["id"] == src), src),
+                    "target_name": next((n["name"] for n in nodes if n["id"] == tgt), tgt),
+                    "relationship": ev.title or "关系变化",
+                    "chapter": ev.chapter_number,
+                    "description": ev.description or "",
+                    "created_at": ev.created_at.isoformat() if ev.created_at else None,
+                })
+        timeline.append({
+            "chapter": ev.chapter_number,
+            "event": ev.title or "",
+            "description": ev.description or "",
+            "entities": entities,
+            "created_at": ev.created_at.isoformat() if ev.created_at else None,
+        })
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "timeline": timeline,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+    }
