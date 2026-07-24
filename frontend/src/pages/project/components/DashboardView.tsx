@@ -13,7 +13,7 @@ import {
   RadarChartOutlined,
 } from '@ant-design/icons';
 import type { Project } from '../../../services/api';
-import { projectApi, chapterApi, characterApi, foreshadowingApi, reviewApi } from '../../../services/api';
+import { projectApi, chapterApi, characterApi, foreshadowingApi, reviewApi, debtApi, contractApi } from '../../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -66,6 +66,8 @@ export default function DashboardPage({ project }: { project: Project }) {
   const id = project.id;
   const [data, setData] = useState<ChartData>({ chapters: [], characters: [], foreshadowings: [] });
   const [reviewTrend, setReviewTrend] = useState<{ chapters: number[]; scores: number[] }>({ chapters: [], scores: [] });
+  const [debtSummary, setDebtSummary] = useState(null);
+  const [contractStats, setContractStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -75,14 +77,18 @@ export default function DashboardPage({ project }: { project: Project }) {
       characterApi.list(id),
       foreshadowingApi.list(id),
       reviewApi.getTrend(id).catch(() => ({ data: { chapters: [], scores: [] } })),
+      debtApi.getSummary(id).catch(() => ({ data: null })),
+      contractApi.getAll(id).catch(() => ({ data: { stats: {} } })),
     ])
-      .then(([chs, chars, fsh, trend]) => {
+      .then(([chs, chars, fsh, trend, debt, cont]) => {
         setData({
           chapters: Array.isArray(chs.data) ? chs.data : [],
           characters: Array.isArray(chars.data) ? chars.data : [],
           foreshadowings: Array.isArray(fsh.data) ? fsh.data : [],
         });
         setReviewTrend(trend.data || { chapters: [], scores: [] });
+        setDebtSummary(debt.data || null);
+        setContractStats(cont.data?.stats || null);
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -270,6 +276,50 @@ export default function DashboardPage({ project }: { project: Project }) {
                 )}
               />
             )}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 第四行：债务 + 合同履约率 */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} md={12}>
+          <Card
+            title={<><DollarOutlined style={{ marginRight: 6 }} />伏笔债务</>}
+            size="small"
+            extra={debtSummary?.overdue_count > 0 ? <Tag color="red">{debtSummary.overdue_count} 逾期</Tag> : <Tag color="green">健康</Tag>}
+          >
+            {debtSummary ? (
+              <Space direction="vertical" size={6}>
+                <MiniBar label="活跃债务" current={debtSummary.active_count} max={debtSummary.total_count} color="#faad14" />
+                <MiniBar label="逾期债务" current={debtSummary.overdue_count} max={debtSummary.total_count} color="#ff4d4f" />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  债务利息累计：{debtSummary.total_interest} · 最大债务：{debtSummary.top_debts?.[0]?.description || '无'}
+                </Text>
+              </Space>
+            ) : <Text type="secondary">暂无债务数据</Text>}
+          </Card>
+        </Col>
+        <Col xs={24} md={12}>
+          <Card
+            title={<><FileProtectOutlined style={{ marginRight: 6 }} />合同履约率</>}
+            size="small"
+            extra={contractStats && contractStats.accepted > 0 ? (
+              <Tag color="green">通过 {contractStats.accepted}</Tag>
+            ) : null}
+          >
+            {contractStats ? (
+              <Space direction="vertical" size={6}>
+                <MiniBar label="已签署" current={contractStats.signed} max={contractStats.signed + (contractStats?.total ?? 0) - contractStats.signed} color="#1890ff" />
+                <MiniBar label="已通过" current={contractStats.accepted} max={contractStats.submitted} color="#52c41a" />
+                {contractStats.rejected > 0 && (
+                  <MiniBar label="已拒绝" current={contractStats.rejected} max={contractStats.submitted} color="#ff4d4f" />
+                )}
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  总提交：{contractStats.submitted} · 通过率：{contractStats.submitted > 0
+                    ? `${Math.round(contractStats.accepted / contractStats.submitted * 100)}%` : '-'}
+                </Text>
+              </Space>
+            ) : <Text type="secondary">暂无合同数据</Text>}
           </Card>
         </Col>
       </Row>

@@ -1,10 +1,11 @@
 // @ts-nocheck
-import { useState, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Steps, Button, Select, Input, Space, message, Typography, Divider, Spin, Alert, Progress } from 'antd';
 import { RocketOutlined, BookOutlined, ThunderboltOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import { api, projectApi, templateApi } from '../../services/api';
+import type { GenreTemplate } from '../../services/api';
 import type { InitStepStatus } from '../../types/init';
 
 const { Title, Paragraph, Text } = Typography;
@@ -36,9 +37,16 @@ export default function InitWizardPage() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Load seed templates on mount
+  useEffect(() => {
+    templateApi.seed().catch(() => {});
+  }, []);
+
   // Form state
   const [step, setStep] = useState(0);
   const [genre, setGenre] = useState('');
+  const [genreTemplate, setGenreTemplate] = useState<GenreTemplate | null>(null);
+  const [genreSearchLoading, setGenreSearchLoading] = useState(false);
   const [theme, setTheme] = useState('');
   const [style, setStyle] = useState('');
   const [referencePatterns, setReferencePatterns] = useState(null);
@@ -209,14 +217,41 @@ export default function InitWizardPage() {
                 style={{ width: 300 }}
                 placeholder="请选择题材"
                 value={genre}
-                onChange={setGenre}
+                onChange={(v) => {
+                  setGenre(v);
+                  if (v) {
+                    templateApi.search(v).then(r => setGenreTemplate(r.data)).catch(() => setGenreTemplate(null));
+                  } else {
+                    setGenreTemplate(null);
+                  }
+                }}
                 options={templates.length
-                  ? templates.map((t) => ({ label: t.name, value: t.genre || t.name }))
+                  ? templates.map((t) => ({ label: `${t.name} (${t.category})`, value: t.name }))
                   : DEFAULT_GENRES.map((g) => ({ label: g, value: g }))}
                 showSearch
                 optionFilterProp="label"
                 allowClear
               />
+              {genreTemplate && (
+                <Card size="small" style={{ marginTop: 8 }}>
+                  <Space direction="vertical" size={8}>
+                    <Text><Text strong>类别：</Text>{genreTemplate.category}</Text>
+                    {genreTemplate.config && (
+                      <>
+                        {genreTemplate.config.pacing && (
+                          <Text><Text strong>节奏：</Text>每章约 {genreTemplate.config.pacing.typical_chapter_word_count} 字，{genreTemplate.config.pacing.coolpoint_interval_chapters} 章一爽点</Text>
+                        )}
+                        {genreTemplate.config.style && (
+                          <Text><Text strong>风格：</Text>{genreTemplate.config.style.vocabulary}，对话占比 {Math.round(genreTemplate.config.style.dialogue_ratio * 100)}%</Text>
+                        )}
+                        {genreTemplate.config.tropes && genreTemplate.config.tropes.length > 0 && (
+                          <Text><Text strong>经典套路：</Text>{genreTemplate.config.tropes.join('、')}</Text>
+                        )}
+                      </>
+                    )}
+                  </Space>
+                </Card>
+              )}
               <Text type="secondary">题材决定了故事的世界基底和叙事基调。</Text>
             </Space>
           )}

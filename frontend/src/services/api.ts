@@ -463,6 +463,14 @@ export const exportApi = {
 
 export default api;
 
+// ── Template (题材模板) ──────────────────────────────────────────
+export interface GenreTemplate { id: string; name: string; category: string; config: any; created_at: string; }
+export const templateApi = {
+  list: () => api.get<GenreTemplate[]>('/templates'),
+  search: (name: string) => api.get<GenreTemplate>(`/templates/search/${encodeURIComponent(name)}`),
+  seed: () => api.post<{ inserted: number; message: string }>('/templates/seed'),
+};
+
 // ═══════════════════════════════════════════════════════════════════════
 // Phase 1-9: Review / Event / Debt / Contract / Pipeline / Search
 // ═══════════════════════════════════════════════════════════════════════

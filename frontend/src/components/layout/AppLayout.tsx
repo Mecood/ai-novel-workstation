@@ -43,6 +43,8 @@ const menuItems = [
   { key: 'prompt-templates', icon: <ThunderboltOutlined />, label: 'Prompt 模板' },
   { key: 'reader', icon: <ReadOutlined />, label: '阅读器' },
   { key: 'search', icon: <SearchOutlined />, label: '项目搜索' },
+  { key: 'relationships', icon: <TeamOutlined />, label: '关系图谱' },
+  { key: 'events', icon: <ThunderboltOutlined />, label: '事件时间线' },
   { key: 'debt', icon: <DollarOutlined />, label: '伏笔债务' },
   { key: 'contracts', icon: <FileProtectOutlined />, label: '合同管理' },
   { key: 'creative', icon: <BulbOutlined />, label: '创意工坊' },
