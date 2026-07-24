@@ -285,6 +285,24 @@ async def init_project(
     """
     await _ensure_ai_configured(db)
     project = await _ensure_project(db, project_id)
+
+    # Resolve genre template: set genre text + template_id on project
+    genre_text = init_params.get("genre") or project.genre or ""
+    if genre_text:
+        project.genre = genre_text
+        from app.models.genre_template import GenreTemplate
+        try:
+            t_result = await db.execute(
+                select(GenreTemplate).where(GenreTemplate.name == genre_text)
+            )
+            tmpl = t_result.scalar_one_or_none()
+            if tmpl:
+                project.template_id = tmpl.id
+        except Exception:
+            pass
+        await db.flush()
+    await db.flush()
+
     ai = AIService()
     state = InitState(project_id)
     state.status = "running"
