@@ -32,10 +32,11 @@ from app.services.post_validation_service import PostValidationService
 router = APIRouter(tags=["auto-pipeline"])
 
 # ── 流水线阶段枚举 ────────────────────────────────────────────────────
-PIPELINE_STAGES = ["review", "polish", "validation", "extraction", "debt", "commit"]
+PIPELINE_STAGES = ["review", "polish", "ai_detect", "validation", "extraction", "debt", "commit"]
 STAGE_LABELS: dict[str, str] = {
     "review": "审查",
     "polish": "润色",
+    "ai_detect": "AI味检测",
     "validation": "校验",
     "extraction": "提取",
     "debt": "评估",
@@ -169,7 +170,7 @@ async def _run_auto_pipeline(
                 # 只在 review 成功且有 issues 时才润色
                 if report and report.get("blocking_count", 0) > 0:
                     polish_output = await polish_service.polish_chapter(
-                        s, project, chapter,
+                        s, chapter,
                         review_result=dict(report),
                     )
                     # 保存润色后的正文回数据库
@@ -186,6 +187,7 @@ async def _run_auto_pipeline(
                     yield {"type": "polish_complete", "data": {
                         "status": polish_output.report.get("status"),
                         "steps_completed": len(polish_output.report.get("steps", {})),
+                        "anti_ai_score": polish_output.report.get("steps", {}).get("anti_ai_final", {}).get("score"),
                     }}
                 else:
                     stage_results["polish"] = {"status": "skipped",
@@ -207,6 +209,51 @@ async def _run_auto_pipeline(
 
         yield {"type": "progress", "stage": "polish", "status": "done",
                "detail": {"changes": polish_result.get("steps") if polish_result else None}}
+
+        # ── Stage 2.6: AI 味检测 ──────────────────────────────────
+        yield {"type": "progress", "stage": "ai_detect", "status": "running",
+               "detail": {"label": STAGE_LABELS["ai_detect"]}}
+        ai_detect_result: dict | None = None
+        try:
+            from app.services.ai_flavor_detector import detect_ai_flavor
+            chapter_text = polish_service._extract_chapter_text(chapter)
+            detect_result = detect_ai_flavor(chapter_text)
+            detect_score = detect_result.get("score", 50)
+            ai_detect_result = {
+                "score": detect_score,
+                "level": detect_result.get("level"),
+                "detection_count": len(detect_result.get("issues", [])),
+                "issues": detect_result.get("issues", [])[:10],
+                "needs_rewrite": detect_score < 50,
+                "summary": f"{len(detect_result.get('issues', []))} 处 AI 味特征，综合得分 {detect_score}/100",
+            }
+            # 如果 AI 味太重 → 调 de_ai_rewrite_sync
+            if detect_score < 50:
+                try:
+                    s2 = _new_stage_session()
+                    try:
+                        rewritten = await ai_service.de_ai_rewrite_sync(s2, chapter_text)
+                        chapter.content = {"text": rewritten}  # type: ignore[assignment]
+                        chapter.word_count = len(rewritten)  # type: ignore[assignment]
+                        await s2.commit()
+                        ai_detect_result["rewritten"] = True
+                        ai_detect_result["new_word_count"] = len(rewritten)
+                    except Exception:
+                        await s2.rollback()
+                        raise
+                    finally:
+                        await s2.close()
+                except Exception:
+                    ai_detect_result["rewritten"] = False
+                    ai_detect_result["rewrite_error"] = "de_ai_rewrite 失败"
+            stage_results["ai_detect"] = {"status": "ok", "result": ai_detect_result}
+            yield {"type": "ai_detect_complete", "data": ai_detect_result}
+        except Exception as e:
+            stage_results["ai_detect"] = {"status": "error", "error": str(e)}
+            yield {"type": "ai_detect_complete", "data": {"error": str(e)}}
+
+        yield {"type": "progress", "stage": "ai_detect", "status": "done",
+               "detail": {"score": ai_detect_result.get("score") if ai_detect_result else None}}
 
         # ── Stage 2.5: 写后强制校验 ──────────────────────────────
         yield {"type": "progress", "stage": "validation", "status": "running",

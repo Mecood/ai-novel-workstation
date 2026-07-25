@@ -420,6 +420,21 @@ class AIService:
         finally:
             await client.close()
 
+    async def de_ai_rewrite_sync(self, db: AsyncSession, content: str) -> str:
+        """De-AI rewrite — synchronous version (non-streaming)."""
+        prompt = self._load_prompt("de_ai")
+        messages = [
+            {"role": "system", "content": prompt["system"]},
+            {"role": "user", "content": prompt["user"].format(
+                original_content=content,
+            )},
+        ]
+        client = await self._build_client(db)
+        try:
+            return str(await client.chat(messages, temperature=0.9))
+        finally:
+            await client.close()
+
     async def de_ai_rewrite_stream(
         self, db: AsyncSession, content: str
     ) -> AsyncGenerator[str, None]:

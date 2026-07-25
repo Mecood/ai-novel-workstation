@@ -218,6 +218,10 @@ export const chapterApi = {
       }
     });
   },
+  detectAi: (projectId: string, chapterId: string) =>
+    api.post<{ score: number; issues: any[]; level: string }>(`/projects/${projectId}/chapters/${chapterId}/detect-ai`),
+  deAi: (projectId: string, chapterId: string) =>
+    api.post<{ content: string; score: number }>(`/projects/${projectId}/chapters/${chapterId}/de-ai`),
 };
 
 // === Volume ===

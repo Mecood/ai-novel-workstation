@@ -187,6 +187,17 @@ export default function WritingPage() {
           } else if (eventType === 'extraction_complete') {
             const count = event.data?.event_count || 0;
             setPipelineStage(`提取完成 — ${count} 个事件`);
+          } else if (eventType === 'ai_detect_complete') {
+            const score = event.data?.score;
+            const needsRewrite = event.data?.needs_rewrite;
+            const count = event.data?.detection_count || 0;
+            if (needsRewrite) {
+              setPipelineStage(`AI味检测 — ${count} 处特征，得分 ${score}，正在重写...`);
+              message.warning(`AI味过重（得分 ${score}），自动去AI味重写`);
+            } else {
+              setPipelineStage(`AI味检测通过 — 得分 ${score}`);
+              message.success(`AI味检测通过（得分 ${score}）`);
+            }
           } else if (eventType === 'validation_complete') {
             const passed = event.data?.passed;
             const blocking = event.data?.blocking_count || 0;

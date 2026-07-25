@@ -411,8 +411,11 @@ class PolishService:
     # ── 工具方法 ────────────────────────────────────────────────
     def _extract_chapter_text(self, chapter: Chapter) -> str:
         """从 Chapter 提取纯文本正文。"""
-        if isinstance(chapter.content, dict):
-            return json.dumps(chapter.content, ensure_ascii=False, indent=2)
-        if isinstance(chapter.content, str):
-            return chapter.content
-        return str(chapter.content or "")
+        c = chapter.content
+        if c is None:
+            return ""
+        if isinstance(c, dict) and "text" in c and isinstance(c["text"], str):
+            return c["text"]
+        if isinstance(c, str):
+            return c
+        return str(c or "")
