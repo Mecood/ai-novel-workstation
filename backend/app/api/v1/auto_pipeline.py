@@ -214,6 +214,7 @@ async def _run_auto_pipeline(
         yield {"type": "progress", "stage": "ai_detect", "status": "running",
                "detail": {"label": STAGE_LABELS["ai_detect"]}}
         ai_detect_result: dict | None = None
+        zhuque_result: dict | None = None
         try:
             from app.services.ai_flavor_detector import detect_ai_flavor
             chapter_text = polish_service._extract_chapter_text(chapter)
@@ -238,6 +239,7 @@ async def _run_auto_pipeline(
                         await s2.commit()
                         ai_detect_result["rewritten"] = True
                         ai_detect_result["new_word_count"] = len(rewritten)
+                        chapter_text = rewritten  # 用改写后文本做 zhuque 检测
                     except Exception:
                         await s2.rollback()
                         raise
@@ -246,6 +248,11 @@ async def _run_auto_pipeline(
                 except Exception:
                     ai_detect_result["rewritten"] = False
                     ai_detect_result["rewrite_error"] = "de_ai_rewrite 失败"
+
+            # ── Stage 2.6b: 朱雀检测（AI 生成鉴定）─────────────
+            from app.services.zhuque_detector import detect_ai_generation
+            zhuque_result = await detect_ai_generation(chapter_text)
+            ai_detect_result["zhuque"] = zhuque_result
             stage_results["ai_detect"] = {"status": "ok", "result": ai_detect_result}
             yield {"type": "ai_detect_complete", "data": ai_detect_result}
         except Exception as e:
