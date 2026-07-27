@@ -1,10 +1,11 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.v1 import projects, worldviews, characters, chapters, foreshadowings, generation, knowledges, settings as settings_router, story_core, volumes, prompt_templates, search, reviews, events, debts, contracts, pipeline, auto_pipeline, templates, creative, style, init, deconstruction
+from app.api.v1 import projects, worldviews, characters, chapters, foreshadowings, generation, knowledges, settings as settings_router, story_core, volumes, prompt_templates, search, reviews, events, debts, contracts, pipeline, auto_pipeline, templates, creative, style, init, deconstruction, skills, agent, export, versions, assets
 
 
 @asynccontextmanager
@@ -26,10 +27,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files for generated images
+app.mount("/static", StaticFiles(directory="storage"), name="static")
+
 app.include_router(projects.router, prefix=settings.API_PREFIX)
 app.include_router(worldviews.router, prefix=settings.API_PREFIX)
 app.include_router(characters.router, prefix=settings.API_PREFIX)
 app.include_router(chapters.router, prefix=settings.API_PREFIX)
+app.include_router(versions.router, prefix=settings.API_PREFIX)
 app.include_router(foreshadowings.router, prefix=settings.API_PREFIX)
 app.include_router(knowledges.router, prefix=settings.API_PREFIX)
 app.include_router(settings_router.router, prefix=settings.API_PREFIX)
@@ -51,6 +56,11 @@ app.include_router(style.router, prefix=settings.API_PREFIX)
 app.include_router(style.router, prefix=settings.API_PREFIX)
 app.include_router(init.router, prefix=settings.API_PREFIX)
 app.include_router(deconstruction.router, prefix=settings.API_PREFIX)
+app.include_router(skills.skills_router, prefix=settings.API_PREFIX)
+app.include_router(skills.project_skills_router, prefix=settings.API_PREFIX)
+app.include_router(export.router, prefix=settings.API_PREFIX)
+app.include_router(agent.router, prefix=settings.API_PREFIX)
+app.include_router(assets.router, prefix=settings.API_PREFIX)
 
 @app.get("/health")
 async def health_check():

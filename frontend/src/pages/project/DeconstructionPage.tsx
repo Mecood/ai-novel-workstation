@@ -103,8 +103,11 @@ export default function DeconstructionPage() {
   const q = result?.quality;
   const passed = q?.passed;
 
+  const match = window.location.pathname.match(/\/projects\/([^/]+)/);
+  const projectId = match ? match[1] : undefined;
+
   return (
-    <AppLayout projectId={(window.location.pathname.match(/\/projects\/([^/]+)/) || ['', ''])[1]}>
+    <AppLayout projectId={projectId}>
       <Card
         title={
           <Space>

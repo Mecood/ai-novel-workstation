@@ -224,6 +224,34 @@ export const chapterApi = {
     api.post<{ content: string; score: number }>(`/projects/${projectId}/chapters/${chapterId}/de-ai`),
 };
 
+// === Chapter Version History ===
+export interface VersionEntry {
+  version: number;
+  content_hash: string;
+  word_count: number;
+  saved_at: string;
+}
+export interface VersionDetail {
+  version: number;
+  content_hash: string;
+  word_count: number;
+  content: any;
+  saved_at: string;
+}
+export interface VersionHistoryResponse {
+  chapter_id: string;
+  current_version: number;
+  versions: VersionEntry[];
+}
+export const versionApi = {
+  list: (projectId: string, chapterId: string) =>
+    api.get<VersionHistoryResponse>(`/projects/${projectId}/chapters/${chapterId}/versions`),
+  get: (projectId: string, chapterId: string, version: number) =>
+    api.get<VersionDetail>(`/projects/${projectId}/chapters/${chapterId}/versions/${version}`),
+  restore: (projectId: string, chapterId: string, version: number) =>
+    api.post<Chapter>(`/projects/${projectId}/chapters/${chapterId}/versions/${version}/restore`),
+};
+
 // === Volume ===
 export interface Volume {
   id: string;
@@ -452,21 +480,63 @@ export const storyCoreApi = {
   generate: (projectId: string) => api.post(`/projects/${projectId}/story-core/generate`),
   restore: (projectId: string, version: number) => api.post(`/projects/${projectId}/story-core/restore/${version}`),
 };
-
-export const exportApi = {
-  download: (projectId: string, projectName: string) => {
-    const url = `${API_BASE}/projects/${projectId}/export`;
-    const a = document.createElement('a');
+// === Export (.docx) ===
+export function _downloadBlobFile(projectName: string, chapterTitle?: string) {
+  return (blob: Blob) => {
+    const safeName = projectName.replace(/[\/\\]/g, "_");
+    const safeTitle = (chapterTitle || "full").replace(/[\/\\]/g, "_");
+    const filename = `${safeName}_${safeTitle}.docx`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `${projectName.replace(/[/\\]/g, '_')}_export.zip`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+}
+export const exportApi = {
+  downloadFull: (projectId: string, projectName: string) => {
+    const url = `${API_BASE}/projects/${projectId}/export/full`;
+    return fetch(url, { method: "POST" }).then(async (resp) => {
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+      const blob = await resp.blob();
+      _downloadBlobFile(projectName)(blob);
+    });
+  },
+  downloadChapter: (projectId: string, projectName: string, chapterId: string, chapterTitle: string) => {
+    const url = `${API_BASE}/projects/${projectId}/export/chapter/${chapterId}`;
+    return fetch(url, { method: "POST" }).then(async (resp) => {
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+      const blob = await resp.blob();
+      _downloadBlobFile(projectName, chapterTitle)(blob);
+    });
   },
 };
 
 export { api };
 export default api;
+
+// ═══════════════════════════════════════════════════════════════════════
+// Assets — scene images, etc.
+// ═══════════════════════════════════════════════════════════════════════
+export interface ProjectAsset {
+  id: string;
+  project_id: string;
+  type: string;
+  label: string | null;
+  url: string;
+  prompt: string | null;
+  created_at: string;
+}
+
+export const assetsApi = {
+  list: (projectId: string) =>
+    api.get<{ items: ProjectAsset[] }>(`/projects/${projectId}/assets`),
+  generateScene: (projectId: string, body: { prompt: string; label?: string }) =>
+    api.post<ProjectAsset>(`/projects/${projectId}/assets/generate-scene`, body),
+};
 
 // ── Template (题材模板) ──────────────────────────────────────────
 export interface GenreTemplate { id: string; name: string; category: string; config: any; created_at: string; }
@@ -635,3 +705,22 @@ export const searchApi = {
   getContext: (projectId: string, topic: string) => api.get<{ context: string }>(`/projects/${projectId}/search/context`, { params: { topic } }),
   indexContent: (projectId: string, contentType: string) => api.post<{ indexed: number; content_type: string }>(`/projects/${projectId}/search/index/${contentType}`),
 };
+
+// ── Skills ────────────────────────────────────────────────────────────
+export const skillsApi = {
+  listBuiltin: () => api.get<SkillDefinition[]>('/skills'),
+  listProject: (projectId: string) => api.get<ProjectSkill[]>('/projects/' + projectId + '/skills'),
+  enable: (projectId: string, skillName: string, skillCategory: string) =>
+    api.post<ProjectSkill>('/projects/' + projectId + '/skills', { skill_name: skillName, skill_category: skillCategory } as any),
+  disable: (projectId: string, skillName: string) =>
+    api.delete<ProjectSkill>('/projects/' + projectId + '/skills/' + encodeURIComponent(skillName)),
+};
+
+export interface SkillDefinition {
+  name: string; category: string; description: string; version: string;
+  tasks: string[]; triggers: string[]; priority: number;
+}
+
+export interface ProjectSkill {
+  id: string; project_id: string; skill_name: string; skill_category: string; enabled: boolean;
+}

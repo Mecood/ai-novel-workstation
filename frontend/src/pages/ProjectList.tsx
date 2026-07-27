@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Card, Button, Modal, Form, Input, Select, message, Row, Col, Tag, Typography, Skeleton, Empty, Space, Popconfirm } from 'antd';
-import { PlusOutlined, BookOutlined, RightOutlined, ClockCircleOutlined, DeleteOutlined, SettingOutlined } from '@ant-design/icons';
+import { Card, Button, message, Row, Col, Tag, Typography, Skeleton, Empty, Space, Popconfirm } from 'antd';
+import { PlusOutlined, BookOutlined, RightOutlined, ClockCircleOutlined, DeleteOutlined, SettingOutlined, BulbOutlined, RocketOutlined, SnippetsOutlined, SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { projectApi } from '../services/api';
-import type { Project, ProjectCreate } from '../services/api';
+import type { Project } from '../services/api';
 
 const { Title, Text } = Typography;
 
@@ -21,9 +21,6 @@ export default function ProjectList() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [form] = Form.useForm();
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -40,21 +37,6 @@ export default function ProjectList() {
   useEffect(() => {
     fetchProjects();
   }, []);
-
-  const handleCreate = async (values: ProjectCreate) => {
-    setSubmitting(true);
-    try {
-      const res = await projectApi.create(values);
-      message.success('项目创建成功');
-      setModalOpen(false);
-      form.resetFields();
-      navigate(`/projects/${res.data.id}/workshop`);
-    } catch {
-      message.error('创建失败');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -104,7 +86,7 @@ export default function ProjectList() {
             type="primary"
             size="large"
             icon={<PlusOutlined />}
-            onClick={() => setModalOpen(true)}
+            onClick={() => navigate('/projects/new')}
           >
             新建项目
           </Button>
@@ -116,6 +98,58 @@ export default function ProjectList() {
           />
         </Space>
       </div>
+
+      {/* Tool Cards */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 32 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            hoverable
+            onClick={() => navigate('/creative')}
+            style={{ borderRadius: 12, textAlign: 'center', borderTop: '3px solid #5B9BD5' }}
+            styles={{ body: { padding: '24px 16px' } }}
+          >
+            <BulbOutlined style={{ fontSize: 32, color: '#5B9BD5', marginBottom: 12 }} />
+            <Title level={5} style={{ margin: '4px 0' }}>创意工坊</Title>
+            <Text type="secondary" style={{ fontSize: 13 }}>创意组合 · 故事框架 · 灵感激发</Text>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            hoverable
+            onClick={() => navigate('/style')}
+            style={{ borderRadius: 12, textAlign: 'center', borderTop: '3px solid #5B9BD5' }}
+            styles={{ body: { padding: '24px 16px' } }}
+          >
+            <RocketOutlined style={{ fontSize: 32, color: '#5B9BD5', marginBottom: 12 }} />
+            <Title level={5} style={{ margin: '0 0' }}>风格工厂</Title>
+            <Text type="secondary" style={{ fontSize: 13 }}>风格参数 · 变体生成 · 文风调优</Text>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            hoverable
+            onClick={() => navigate('/deconstruction')}
+            style={{ borderRadius: 12, textAlign: 'center', borderTop: '3px solid #5B9BD5' }}
+            styles={{ body: { padding: '24px 16px' } }}
+          >
+            <SnippetsOutlined style={{ fontSize: 32, color: '#5B9BD5', marginBottom: 12 }} />
+            <Title level={5} style={{ margin: '0 0' }}>参考书拆解</Title>
+            <Text type="secondary" style={{ fontSize: 13 }}>参考书分析 · 模式提取 · 创意迁移</Text>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card
+            hoverable
+            onClick={() => navigate('/projects/search')}
+            style={{ borderRadius: 12, textAlign: 'center', borderTop: '3px solid #5B9BD5' }}
+            styles={{ body: { padding: '24px 16px' } }}
+          >
+            <SearchOutlined style={{ fontSize: 32, color: '#5B9BD5', marginBottom: 12 }} />
+            <Title level={5} style={{ margin: '0 0' }}>项目搜索</Title>
+            <Text type="secondary" style={{ fontSize: 13 }}>全文检索 · 跨项目查询</Text>
+          </Card>
+        </Col>
+      </Row>
 
       {loading ? (
         <Row gutter={[16, 16]}>
@@ -142,7 +176,7 @@ export default function ProjectList() {
               type="primary"
               size="large"
               icon={<PlusOutlined />}
-              onClick={() => setModalOpen(true)}
+              onClick={() => navigate('/projects/new')}
               style={{ marginTop: 16 }}
             >
               创建你的第一个小说项目
@@ -262,61 +296,6 @@ export default function ProjectList() {
         </Row>
       )}
 
-      <Modal
-        title="新建项目"
-        open={modalOpen}
-        onCancel={() => {
-          setModalOpen(false);
-          form.resetFields();
-        }}
-        footer={null}
-        width={480}
-        destroyOnClose
-      >
-        <Form form={form} layout="vertical" onFinish={handleCreate} preserve={false}>
-          <Form.Item
-            name="name"
-            label="项目名称"
-            rules={[{ required: true, message: '请输入项目名称' }]}
-          >
-            <Input placeholder="如：星穹纪元" size="large" maxLength={50} showCount />
-          </Form.Item>
-          <Form.Item
-            name="genre"
-            label="小说类型"
-            rules={[{ required: true, message: '请选择小说类型' }]}
-          >
-            <Select placeholder="请选择类型" size="large">
-              <Select.Option value="fantasy">奇幻</Select.Option>
-              <Select.Option value="sci-fi">科幻</Select.Option>
-              <Select.Option value="romance">言情</Select.Option>
-              <Select.Option value="mystery">悬疑</Select.Option>
-              <Select.Option value="wuxia">武侠</Select.Option>
-              <Select.Option value="horror">恐怖</Select.Option>
-              <Select.Option value="other">其他</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="description" label="简介">
-            <Input.TextArea
-              rows={4}
-              placeholder="简单介绍一下你的故事（可选）"
-              maxLength={500}
-              showCount
-            />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={submitting}
-              size="large"
-              style={{ width: '100%' }}
-            >
-              创建并进入
-            </Button>
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   );
 }

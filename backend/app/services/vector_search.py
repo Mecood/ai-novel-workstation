@@ -99,16 +99,21 @@ class VectorSearchService:
     async def search(
         self, project_id: str, query: str, top_k: int = 5, ai_client: Optional[AIClient] = None
     ) -> list[dict]:
-        """Search for most relevant content chunks with optional reranking."""
+        """Search for most relevant content chunks using ChromaDB embedding function."""
         collection = self._get_collection(project_id)
-        query_embedding = await ai_client.embed(query)
 
-        # ChromaDB 返回的原始结果（可能比 top_k 多一些用于 rerank）
         search_k = min(top_k * 3, collection.count())
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=search_k,
-        )
+        if search_k == 0:
+            return []
+
+        # Use ChromaDB's built-in embedding function (query_texts) instead of external API
+        try:
+            results = collection.query(
+                query_texts=[query],
+                n_results=search_k,
+            )
+        except Exception:
+            return []
 
         if not results["ids"]:
             return []

@@ -15,6 +15,7 @@ from app.models.chapter import Chapter
 from app.models.character import Character
 from app.models.project import Project
 from app.models.genre_template import GenreTemplate
+from app.models.skill import ProjectSkill
 
 # ── Phase 13.3：反幻觉三定律（注入每个 AI 生成的 system prompt）──────
 ANTI_HALLUCINATION_LAWS = """
@@ -462,3 +463,63 @@ class AIService:
             "system": data["system"],
             "user": data["user"],
         }
+
+    async def chat_with_skills(
+        self,
+        db: AsyncSession,
+        task: str,
+        user_prompt: str,
+        base_system_prompt: str = "",
+        project_id: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> str:
+        """Wrap chat with Skill injection for the given task. Resolves matching
+        skills from the registry, optionally filters to project-enabled skills,
+        and injects skill content as a system message prefix."""
+        try:
+            from app.services.skill_registry import get_registry
+            registry = get_registry()
+            skills = registry.get_skills_for_task(task)
+
+            if project_id:
+                result = await db.execute(
+                    select(ProjectSkill).where(
+                        ProjectSkill.project_id == project_id,
+                        ProjectSkill.enabled == True,
+                    )
+                )
+                enabled_names = {ps.skill_name for ps in result.scalars().all()}
+                skills = [s for s in skills if s.name in enabled_names]
+
+            skill_context = "\n\n".join(
+                f"## Skill: {s.name}\n{s.content[:2000]}"
+                for s in sorted(skills, key=lambda x: -x.priority)
+            ) if skills else ""
+
+            full_system = (
+                f"{base_system_prompt}\n\n{skill_context}"
+                if skill_context and base_system_prompt
+                else skill_context or base_system_prompt
+            )
+
+            messages = [
+                {"role": "system", "content": full_system},
+                {"role": "user", "content": user_prompt},
+            ]
+            client = await self._build_client(db)
+            try:
+                return str(await client.chat(messages, temperature=temperature, max_tokens=max_tokens))
+            finally:
+                await client.close()
+        except Exception:
+            # If skill injection fails, fall back to plain chat
+            messages = [
+                {"role": "system", "content": base_system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            client = await self._build_client(db)
+            try:
+                return str(await client.chat(messages, temperature=temperature, max_tokens=max_tokens))
+            finally:
+                await client.close()

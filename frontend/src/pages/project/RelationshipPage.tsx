@@ -1,11 +1,13 @@
 // @ts-nocheck
 import { useParams } from 'react-router-dom';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, Spin, Button, Typography, Tag, Tooltip, Space, Row, Col, Empty, InputNumber, message } from 'antd';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Card, Spin, Button, Typography, Tag, Tooltip, Space, Row, Col, Empty, InputNumber, message, Tabs } from 'antd';
 import { UsergroupAddOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react';
 import AppLayout from '../../components/layout/AppLayout';
-import { eventApi, EVENT_TYPE_LABELS } from '../../services/api';
+import { eventApi, characterApi, type Character } from '../../services/api';
+import G6CharacterGraph from '../../components/charts/G6CharacterGraph';
+import type { GraphNodeData, GraphEdgeData } from '../../components/charts/G6CharacterGraph';
 
 const { Title, Text } = Typography;
 
@@ -33,12 +35,98 @@ function pickColor(rel: string) {
   return REL_COLORS.其他;
 }
 
+function getShortRelLabel(relation: string): string {
+  const SHORT_MAP: Record<string, string> = {
+    '养父': '养父',
+    '导师': '导师',
+    '敌人': '敌人',
+    '寄生': '寄生',
+    '宿敌': '宿敌',
+    '监视': '监视',
+    '战友': '战友',
+    '姐妹': '姐妹',
+    '情侣': '情侣',
+    '主仆': '主仆',
+    '师徒': '师徒',
+    '盟友': '盟友',
+    '追杀': '追杀',
+    '囚禁': '囚禁',
+    '信任': '信任',
+    '利用': '利用',
+    '背叛': '背叛',
+    '敌对': '敌对',
+  };
+  for (const [k, v] of Object.entries(SHORT_MAP)) {
+    if (relation.includes(k)) return v;
+  }
+  return relation.substring(0, 2);
+}
+
+// ── 从 characters 构建 G6 图谱数据 ──
+function buildCharacterGraphData(characters: Character[]): {
+  nodes: GraphNodeData[];
+  edges: GraphEdgeData[];
+  characterMap: Map<string, Character>;
+} {
+  const characterMap = new Map<string, Character>();
+  const nodeSet = new Set<string>();
+  const nodes: GraphNodeData[] = [];
+  const edges: GraphEdgeData[] = [];
+
+  for (const c of characters) {
+    nodeSet.add(c.id);
+    characterMap.set(c.id, c);
+    nodes.push({
+      id: c.id,
+      label: c.name,
+      roleType: c.role_type,
+      background: (c.background || '').slice(0, 80),
+    });
+  }
+
+  for (const c of characters) {
+    const rels = Array.isArray(c.relationships) ? c.relationships : [];
+    for (const rel of rels) {
+      if (!rel || !rel.with) continue;
+      const targetName = rel.with;
+      // 通过名字找目标角色
+      const targetChar = characters.find((ch) => ch.name === targetName);
+      if (!targetChar) continue;
+
+      edges.push({
+        source: c.id,
+        target: targetChar.id,
+        sourceName: c.name,
+        targetName: targetName,
+        label: getShortRelLabel(rel.relation),
+        description: rel.relation || '',
+      });
+    }
+  }
+
+  // 去重边
+  const seenEdgeKeys = new Set<string>();
+  const uniqueEdges: GraphEdgeData[] = [];
+  for (const e of edges) {
+    const key = [e.source, e.target].sort().join('--');
+    if (!seenEdgeKeys.has(key)) {
+      seenEdgeKeys.add(key);
+      uniqueEdges.push(e);
+    }
+  }
+
+  return { nodes, edges: uniqueEdges, characterMap };
+}
+
 export default function RelationshipPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<{ nodes: any[]; edges: any[]; timeline: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [charLoading, setCharLoading] = useState(true);
+  const [characters, setCharacters] = useState<Character[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [extractChapter, setExtractChapter] = useState(1);
+  const [activeTab, setActiveTab] = useState<'graph' | 'events'>('graph');
   const chartRef = useRef<any>(null);
 
   const load = useCallback(async () => {
@@ -54,7 +142,20 @@ export default function RelationshipPage() {
     }
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  const loadCharacters = useCallback(async () => {
+    if (!id) return;
+    setCharLoading(true);
+    try {
+      const chars = await characterApi.list(id);
+      setCharacters(chars.data || []);
+    } catch {
+      message.error('加载角色数据失败');
+    } finally {
+      setCharLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { load(); loadCharacters(); }, [load, loadCharacters]);
 
   const handleExtract = async () => {
     if (!id) return;
@@ -74,6 +175,9 @@ export default function RelationshipPage() {
       setExtracting(false);
     }
   };
+
+  // ── G6 图谱数据（从 characters API 构建） ──
+  const characterGraphData = useMemo(() => buildCharacterGraphData(characters), [characters]);
 
   // ECharts 关系图配置
   const graphOption = data && data.nodes.length
@@ -173,6 +277,87 @@ export default function RelationshipPage() {
       }
     : {};
 
+  // ── Tab items ──
+  const tabItems = [
+    {
+      key: 'graph',
+      label: '角色图谱',
+      children: (
+        <Card size="small" style={{ marginBottom: 16 }} styles={{ body: { padding: '8px' } }}>
+          <G6CharacterGraph
+            nodes={characterGraphData.nodes}
+            edges={characterGraphData.edges}
+            loading={charLoading}
+            height={520}
+            onNodeClick={(nodeId) => {
+              // 可以在这里跳转到角色详情
+              console.log('Clicked node:', nodeId, characters.find(c => c.id === nodeId)?.name);
+            }}
+          />
+        </Card>
+      ),
+    },
+    {
+      key: 'events',
+      label: '事件统计',
+      children: (
+        <>
+          {/* ECharts 关系图 */}
+          <Card size="small" style={{ marginBottom: 16 }} styles={{ body: { padding: '8px' } }}>
+            <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+              关系网络（可拖拽、缩放）
+            </Text>
+            {loading ? <Spin /> : data && data.nodes.length ? (
+              <ReactEChartsCore
+                ref={chartRef}
+                option={graphOption}
+                style={{ height: 420 }}
+                notMerge
+                onChartReady={(inst) => { chartRef.current = inst; }}
+              />
+            ) : (
+              <Empty description="暂无关系数据，请先对章节执行「提取事件」" />
+            )}
+          </Card>
+
+          {/* ECharts 关系变化时间线 */}
+          <Card size="small" styles={{ body: { padding: '8px' } }}>
+            <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
+              关系变化时间线
+            </Text>
+            {loading ? <Spin /> : data && data.timeline.length ? (
+              <div style={{ display: 'flex', gap: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <ReactEChartsCore option={timelineOption} style={{ height: 180 }} notMerge />
+                </div>
+                <div style={{ flex: 1, maxHeight: 180, overflowY: 'auto' }}>
+                  <Space direction="vertical" size={4} style={{ width: '100%' }} wrap>
+                    {data.timeline.slice().reverse().map((t, i) => (
+                      <div key={i} style={{ fontSize: 12, padding: '4px 8px',
+                                             backgroundColor: 'rgba(82,196,26,0.08)', borderRadius: 4 }}>
+                        <Tag style={{ margin: 0, marginRight: 4 }} color="green">第{t.chapter}章</Tag>
+                        <Text strong>{t.event}</Text>
+                        {t.description && (
+                          <Tooltip title={t.description}>
+                            <Text type="secondary" style={{ marginLeft: 4, fontSize: 11 }}>
+                              {t.description.slice(0, 40)}{t.description.length > 40 ? '…' : ''}
+                            </Text>
+                          </Tooltip>
+                        )}
+                      </div>
+                    ))}
+                  </Space>
+                </div>
+              </div>
+            ) : (
+              <Empty description="暂无关系变化时间线" />
+            )}
+          </Card>
+        </>
+      ),
+    },
+  ];
+
   return (
     <AppLayout projectId={id!}>
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
@@ -204,82 +389,41 @@ export default function RelationshipPage() {
         <Col span={6}>
           <Card size="small">
             <Text type="secondary" style={{ fontSize: 12 }}>角色节点</Text>
-            <Title level={2} style={{ margin: 8 }}>{data?.node_count ?? 0}</Title>
+            <Title level={2} style={{ margin: '8px 0' }}>
+              {activeTab === 'graph' ? characterGraphData.nodes.length : (data?.node_count ?? 0)}
+            </Title>
           </Card>
         </Col>
         <Col span={6}>
           <Card size="small">
             <Text type="secondary" style={{ fontSize: 12 }}>关系边</Text>
-            <Title level={2} style={{ margin: 8 }}>{data?.edge_count ?? 0}</Title>
+            <Title level={2} style={{ margin: '8px 0' }}>
+              {activeTab === 'graph' ? characterGraphData.edges.length : (data?.edge_count ?? 0)}
+            </Title>
           </Card>
         </Col>
         <Col span={6}>
           <Card size="small">
             <Text type="secondary" style={{ fontSize: 12 }}>关系变化事件</Text>
-            <Title level={2} style={{ margin: 8 }}>{data?.timeline.length ?? 0}</Title>
+            <Title level={2} style={{ margin: '8px 0' }}>{data?.timeline.length ?? 0}</Title>
           </Card>
         </Col>
         <Col span={6}>
           <Card size="small">
             <Text type="secondary" style={{ fontSize: 12 }}>涉及章节</Text>
-            <Title level={2} style={{ margin: 8 }}>
+            <Title level={2} style={{ margin: '8px 0' }}>
               {data ? [...new Set(data.timeline.map((t) => t.chapter))].length : 0}
             </Title>
           </Card>
         </Col>
       </Row>
 
-      {/* 关系图 */}
-      <Card size="small" style={{ marginBottom: 16 }} bodyStyle={{ padding: '8px' }}>
-        <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
-          关系网络（可拖拽、缩放）
-        </Text>
-        {loading ? <Spin /> : data && data.nodes.length ? (
-          <ReactEChartsCore
-            ref={chartRef}
-            option={graphOption}
-            style={{ height: 420 }}
-            notMerge
-            onChartReady={(inst) => { chartRef.current = inst; }}
-          />
-        ) : (
-          <Empty description="暂无关系数据，请先对章节执行「提取事件」" />
-        )}
-      </Card>
-
-      {/* 关系变化时间线 */}
-      <Card size="small" bodyStyle={{ padding: '8px' }}>
-        <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>
-          关系变化时间线
-        </Text>
-        {loading ? <Spin /> : data && data.timeline.length ? (
-          <div style={{ display: 'flex', gap: 16 }}>
-            <div style={{ flex: 1 }}>
-              <ReactEChartsCore option={timelineOption} style={{ height: 180 }} notMerge />
-            </div>
-            <div style={{ flex: 1, maxHeight: 180, overflowY: 'auto' }}>
-              <Space direction="vertical" size={4} style={{ width: '100%' }} wrap>
-                {data.timeline.slice().reverse().map((t, i) => (
-                  <div key={i} style={{ fontSize: 12, padding: '4px 8px',
-                                       backgroundColor: 'rgba(82,196,26,0.08)', borderRadius: 4 }}>
-                    <Tag style={{ margin: 0, marginRight: 4 }} color="green">第{t.chapter}章</Tag>
-                    <Text strong>{t.event}</Text>
-                    {t.description && (
-                      <Tooltip title={t.description}>
-                        <Text type="secondary" style={{ marginLeft: 4, fontSize: 11 }}>
-                          {t.description.slice(0, 40)}{t.description.length > 40 ? '…' : ''}
-                        </Text>
-                      </Tooltip>
-                    )}
-                  </div>
-                ))}
-              </Space>
-            </div>
-          </div>
-        ) : (
-          <Empty description="暂无关系变化时间线" />
-        )}
-      </Card>
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => setActiveTab(key as 'graph' | 'events')}
+        items={tabItems}
+        style={{ marginTop: 0 }}
+      />
     </AppLayout>
   );
 }

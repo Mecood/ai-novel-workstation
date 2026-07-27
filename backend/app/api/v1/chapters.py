@@ -7,6 +7,9 @@ from app.core.database import get_db
 from app.models.project import Project
 from app.models.chapter import Chapter
 from app.schemas.chapter import ChapterCreate, ChapterUpdate, ChapterResponse
+import hashlib
+import json
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/projects/{project_id}/chapters", tags=["chapters"])
 
@@ -82,6 +85,29 @@ async def update_chapter(
         raise HTTPException(status_code=404, detail="Chapter not found")
 
     update_data = data.model_dump(exclude_unset=True)
+    if update_data:
+        # ── Phase 4: version history ──
+        # Snapshot the CURRENT content into _history BEFORE the update is applied.
+        if chapter._history is None:
+            chapter._history = []
+        snapshot_content = chapter.content
+        content_text = ""
+        if isinstance(snapshot_content, dict):
+            content_text = snapshot_content.get("text", "") or ""
+        elif isinstance(snapshot_content, str):
+            content_text = snapshot_content
+        else:
+            content_text = json.dumps(snapshot_content, ensure_ascii=False) if snapshot_content else ""
+        snapshot = {
+            "version": chapter._version,
+            "content": snapshot_content,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "word_count": chapter.word_count,
+            "content_hash": hashlib.sha256(content_text.encode("utf-8")).hexdigest()[:16],
+        }
+        chapter._history = (chapter._history or []) + [snapshot]
+        chapter._version = chapter._version + 1
+
     for field, value in update_data.items():
         setattr(chapter, field, value)
 

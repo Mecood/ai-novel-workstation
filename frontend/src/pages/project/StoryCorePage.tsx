@@ -5,6 +5,7 @@ import { Card, Spin, message, Button, Typography, Form, Input, Empty, Space } fr
 import { ThunderboltOutlined, SaveOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import VersionBadge from '../../components/VersionBadge';
+import SceneImageGenerator from '../../components/SceneImageGenerator';
 import { storyCoreApi } from '../../services/api';
 
 const { Title } = Typography;
@@ -134,6 +135,7 @@ export default function StoryCorePage() {
 
   return (
     <AppLayout projectId={id!}>
+      <SceneImageGenerator projectId={id!} />
       <div
         style={{
           display: 'flex',

@@ -180,7 +180,7 @@ export default function SearchPage() {
   const handleIndexKeyChange = (keys: string | string[]) => setCollapsedIndex(Array.isArray(keys) ? keys : keys ? [keys] : []);
 
   return (
-    <AppLayout projectId={id!}>
+    <AppLayout projectId={id || undefined}>
       <div style={{ marginBottom: 24 }}>
         <Title level={3} style={{ margin: 0 }}>
           <SearchOutlined style={{ color: '#5B9BD5', marginRight: 8 }} />

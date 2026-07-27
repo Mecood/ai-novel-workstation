@@ -39,7 +39,8 @@ import {
   UnorderedListOutlined,
 } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
-import { chapterApi, volumeApi, foreshadowingApi, aiApi } from '../../services/api';
+import ExportButton from '../../components/ExportButton';
+import { chapterApi, volumeApi, foreshadowingApi, aiApi, projectApi } from '../../services/api';
 import type { Chapter, Volume, ChapterOutlineDetail } from '../../services/api';
 
 const { Title, Paragraph, Text } = Typography;
@@ -122,6 +123,17 @@ export default function OutlinePage() {
   const [editMode, setEditMode] = useState(false);
   const [viewMode, setViewMode] = useState<'form' | 'tree'>('form');
   const [generating, setGenerating] = useState(false);
+  const [projectName, setProjectName] = useState('');
+
+  useEffect(() => {
+    if (!id) return;
+    projectApi
+      .get(id)
+      .then(({ data }) => {
+        if (data?.name) setProjectName(data.name);
+      })
+      .catch(() => {});
+  }, [id]);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -637,6 +649,7 @@ export default function OutlinePage() {
           >
             保存全部
           </Button>
+          <ExportButton projectId={id!} projectName={projectName} size="small" />
         </Space>
       </div>
 

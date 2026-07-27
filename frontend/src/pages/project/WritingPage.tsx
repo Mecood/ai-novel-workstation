@@ -4,11 +4,11 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, InputNumber, Space, Popconfirm, Collapse, Alert, Modal } from 'antd';
 import { FileTextOutlined, SyncOutlined, EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined, BookOutlined, ExperimentOutlined, MedicineBoxOutlined, BarChartOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
+import TiptapEditor from '../../components/editor/TiptapEditor';
 import { chapterApi, aiApi, foreshadowingApi, eventApi, debtApi, contractApi, DEBT_TYPE_LABELS, HOOK_TYPE_LABELS, HOOK_STRENGTH_LABELS, CONTRACT_STATUS_LABELS, COMMIT_STATUS_LABELS, EVENT_TYPE_LABELS, STAGE_LABELS, autoPipelineApi } from '../../services/api';
 import type { Chapter, StoryEvent, ReadingPowerEvalResult, ChapterContract, ChapterCommit, ChapterSkeleton, PipelineStageEvent, PipelineProgress } from '../../services/api';
 
 const { Title, Paragraph, Text } = Typography;
-const { TextArea } = Input;
 
 export default function WritingPage() {
   const { id } = useParams<{ id: string }>();
@@ -789,11 +789,10 @@ export default function WritingPage() {
                 />
               )}
 
-              <TextArea
+              <TiptapEditor
                 value={editingContent}
-                onChange={(e) => setEditingContent(e.target.value)}
-                rows={16}
-                style={{ fontFamily: 'inherit', lineHeight: 1.8 }}
+                onChange={(text) => setEditingContent(text)}
+                height={500}
               />
               <div style={{ textAlign: 'right', marginTop: 12 }}>
                 <Space>

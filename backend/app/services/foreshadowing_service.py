@@ -33,7 +33,7 @@ async def check_expired_foreshadowings(
             Foreshadowing.expected_redemption_chapter.isnot(None),
             Foreshadowing.expected_redemption_chapter <= current_chapter,
             Foreshadowing.status.in_(["planted", "active"]),
-            Foreshadowing.auto_check_enabled == True,  # noqa: E712
+            Foreshadowing.auto_check_enabled.is_(True),
         )
     )
     expired = result.scalars().all()

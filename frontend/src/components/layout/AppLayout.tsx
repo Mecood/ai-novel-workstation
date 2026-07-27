@@ -42,16 +42,11 @@ const menuItems = [
   { key: 'knowledge', icon: <BookOutlined />, label: '知识库' },
   { key: 'prompt-templates', icon: <ThunderboltOutlined />, label: 'Prompt 模板' },
   { key: 'reader', icon: <ReadOutlined />, label: '阅读器' },
-  { key: 'search', icon: <SearchOutlined />, label: '项目搜索' },
   { key: 'relationships', icon: <TeamOutlined />, label: '关系图谱' },
   { key: 'events', icon: <ThunderboltOutlined />, label: '事件时间线' },
   { key: 'debt', icon: <DollarOutlined />, label: '伏笔债务' },
   { key: 'contracts', icon: <FileProtectOutlined />, label: '合同管理' },
-  { key: 'creative', icon: <BulbOutlined />, label: '创意工坊' },
-  { key: 'style', icon: <RocketOutlined />, label: '风格工厂' },
   { key: 'task-book', icon: <SolutionOutlined />, label: '写作任务书' },
-  { key: 'deconstruction', icon: <SnippetsOutlined />, label: '参考书拆解' },
-  { key: 'init-wizard', icon: <RocketOutlined />, label: '初始化向导' },
   { type: 'divider' as const },
   { key: 'settings', icon: <SettingOutlined />, label: '项目设置' },
 ];
@@ -64,7 +59,7 @@ const menuLabelMap = menuItems.reduce<Record<string, string>>((acc, item) => {
 }, {});
 
 interface AppLayoutProps {
-  projectId: string;
+  projectId?: string;
   children: ReactNode;
 }
 
@@ -84,11 +79,14 @@ export default function AppLayout({ projectId, children }: AppLayoutProps) {
   }, [id]);
 
   const onMenuClick = ({ key }: { key: string }) => {
-    navigate(`/projects/${projectId}/${key}`);
+    if (projectId) {
+      navigate(`/projects/${projectId}/${key}`);
+    }
   };
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#FAFAFA' }}>
+      {projectId && (
       <Sider
         width={240}
         style={{
@@ -132,7 +130,8 @@ export default function AppLayout({ projectId, children }: AppLayoutProps) {
           style={{ borderRight: 'none', marginTop: 8 }}
         />
       </Sider>
-      <Layout style={{ marginLeft: 240, background: '#FAFAFA' }}>
+      )}
+      <Layout style={{ marginLeft: projectId ? 240 : 0, background: '#FAFAFA' }}>
         <Content style={{ padding: 24, minHeight: '100vh' }}>
           <Breadcrumb
             style={{ marginBottom: 16 }}
@@ -144,8 +143,8 @@ export default function AppLayout({ projectId, children }: AppLayoutProps) {
                   </span>
                 ),
               },
-              { title: project?.name || '加载中...' },
-              ...(activeKey !== 'workshop'
+              ...(projectId ? [{ title: project?.name || '加载中...' }] : []),
+              ...(activeKey !== 'workshop' && projectId
                 ? [{ title: menuLabelMap[activeKey] || activeKey }]
                 : []),
             ]}

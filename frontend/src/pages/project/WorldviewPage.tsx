@@ -5,6 +5,7 @@ import { Card, Spin, message, Button, Typography, Tag, Timeline, Empty, Alert } 
 import { ThunderboltOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import VersionBadge from '../../components/VersionBadge';
+import SceneImageGenerator from '../../components/SceneImageGenerator';
 import { worldviewApi, aiApi } from '../../services/api';
 import type { Worldview } from '../../services/api';
 
@@ -53,6 +54,7 @@ export default function WorldviewPage() {
 
   return (
     <AppLayout projectId={id!}>
+      <SceneImageGenerator projectId={id!} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <Title level={3} style={{ margin: 0 }}>世界观</Title>
         <Button type="primary" icon={<ThunderboltOutlined />} loading={generating} onClick={handleGenerate}>
