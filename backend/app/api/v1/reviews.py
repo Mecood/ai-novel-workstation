@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
-from app.core.database import get_db
+from app.core.database import get_db, async_session
 from app.models.project import Project
 from app.models.chapter import Chapter
 from app.models.review_report import ReviewReport
@@ -286,4 +286,80 @@ async def get_dimension_trend(
     return {
         "chapters": [r.chapter_number for r in reports],
         "dimensions": dimensions_data,
+    }
+
+
+# ── POST: Polish chapter based on review results ──────────────────────
+@router.post("/chapters/{chapter_number}/polish")
+async def polish_chapter(
+    project_id: UUID,
+    chapter_number: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Run polish (fix issues → style adapt → typeset → anti-AI) on a reviewed chapter."""
+    # Verify project
+    project_result = await db.execute(select(Project).where(Project.id == project_id))
+    project = project_result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Verify chapter
+    chapter_result = await db.execute(
+        select(Chapter).where(
+            Chapter.project_id == project_id,
+            Chapter.chapter_number == chapter_number,
+        )
+    )
+    chapter = chapter_result.scalar_one_or_none()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    if not chapter.content:
+        raise HTTPException(status_code=400, detail="Chapter has no content to polish")
+
+    # Get existing review report
+    review_result = await db.execute(
+        select(ReviewReport).where(
+            ReviewReport.project_id == project_id,
+            ReviewReport.chapter_number == chapter_number,
+        )
+    )
+    report = review_result.scalar_one_or_none()
+
+    if not report:
+        raise HTTPException(status_code=400, detail="No review found for this chapter. Run review first.")
+
+    review_data = {
+        "issues": report.issues or [],
+        "blocking_count": report.blocking_count or 0,
+        "overall_score": float(report.overall_score),
+        "dimension_scores": report.dimension_scores or {},
+    }
+
+    # Load polish service
+    from app.services.polish_service import PolishService
+    polish_service = PolishService(ai_service)
+
+    # Run polish
+    async with async_session() as polish_db:
+        try:
+            result = await polish_service.polish_chapter(
+                polish_db, chapter,
+                review_result=review_data,
+            )
+            # Save polished content back
+            polished_text = result.polished_content
+            chapter.content = {"text": polished_text}
+            chapter.word_count = len(polished_text)
+            await polish_db.commit()
+        except Exception:
+            await polish_db.rollback()
+            raise
+
+    return {
+        "chapter_number": chapter_number,
+        "status": result.report.get("status"),
+        "steps": result.report.get("steps", {}),
+        "total_changes": result.report.get("total_changes", 0),
+        "original_word_count": result.report.get("original_word_count", 0),
+        "polished_word_count": result.report.get("polished_word_count", 0),
     }

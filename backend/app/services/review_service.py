@@ -212,15 +212,27 @@ def _extract_content(chapter: Chapter) -> str:
 
 
 def _calc_overall_score(dimension_scores: dict[str, float], issues: list[dict]) -> float:
-    """Calculate overall score: average of dimension scores, then deduct penalties."""
-    if dimension_scores:
-        avg = sum(dimension_scores.values()) / len(dimension_scores)
-    else:
-        avg = 100.0
-    total_penalty = sum(
-        SEVERITY_PENALTY.get(i.get("severity", "low"), 2) for i in issues
+    """Calculate overall score: weighted average of dimension scores.
+    
+    Dimension scores already reflect issue penalties (AI deducts per problem),
+    so we do NOT double-penalize here. The issues are just for reporting.
+    """
+    if not dimension_scores:
+        return 100.0
+    # Weight: dimensions with more blocking/critical issues get extra weight
+    # but default to equal weight when no issues
+    weights: dict[str, float] = {dim: 1.0 for dim in dimension_scores}
+    for issue in issues:
+        dim = issue.get("dimension", "")
+        if dim in weights:
+            sev = issue.get("severity", "low")
+            extra = {"critical": 0.5, "high": 0.3, "medium": 0.1, "low": 0.0}
+            weights[dim] += extra.get(sev, 0)
+    total_weight = sum(weights.values())
+    weighted_sum = sum(
+        dimension_scores[dim] * weights[dim] for dim in dimension_scores
     )
-    return max(0.0, round(avg - total_penalty, 2))
+    return round(weighted_sum / total_weight, 2)
 
 
 def _count_severities(issues: list[dict]) -> dict[str, int]:

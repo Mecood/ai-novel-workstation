@@ -465,6 +465,7 @@ export const exportApi = {
   },
 };
 
+export { api };
 export default api;
 
 // ── Template (题材模板) ──────────────────────────────────────────
@@ -523,6 +524,8 @@ export const reviewApi = {
   getReport: (projectId: string, chapterNumber: number) => api.get<ReviewReport>(`/projects/${projectId}/chapters/${chapterNumber}/review`),
   getTrend: (projectId: string) => api.get<ReviewTrend>(`/projects/${projectId}/reviews/trend`),
   getDimensionTrend: (projectId: string) => api.get<DimensionTrend>(`/projects/${projectId}/reviews/dimension-trend`),
+  polish: (projectId: string, chapterNumber: number) =>
+    api.post<{ chapter_number: number; status: string; steps: Record<string, any>; total_changes: number; original_word_count: number; polished_word_count: number }>(`/projects/${projectId}/chapters/${chapterNumber}/polish`),
 };
 
 // ── Events ────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import {
 import {
   ExperimentOutlined, ReloadOutlined, WarningFilled, CheckCircleFilled,
   CloseCircleFilled, InfoCircleFilled, FileTextOutlined, ThunderboltOutlined,
-  StopOutlined
+  StopOutlined, ToolOutlined
 } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react';
 import AppLayout from '../../components/layout/AppLayout';
@@ -496,6 +496,7 @@ function L3Tab({ l3 }: { l3: TierL3Result | null }) {
 export default function ConsistencyPage() {
   const { id } = useParams<{ id: string }>();
   const [reviewing, setReviewing] = useState(false);
+  const [polishing, setPolishing] = useState(false);
   const [report, setReport] = useState<ReviewReport | null>(null);
   const [trend, setTrend] = useState<ReviewTrend | null>(null);
   const [dimensionTrend, setDimensionTrend] = useState<DimensionTrend | null>(null);
@@ -544,8 +545,8 @@ export default function ConsistencyPage() {
       await reviewApi.trigger(id, selectedChapter, (data) => {
         if (data.type === 'progress') {
           setProgressMsg(data.message || '审查中...');
-        } else if (data.type === 'complete' && data.report) {
-          setReport(data.report as ReviewReport);
+        } else if (data.type === 'complete') {
+          setReport((data.report || data.tiered_results) as ReviewReport);
           setProgressMsg('');
           message.success('审查完成');
         } else if (data.type === 'error') {
@@ -559,6 +560,27 @@ export default function ConsistencyPage() {
       setProgressMsg('');
     } finally {
       setReviewing(false);
+    }
+  };
+
+  const handlePolish = async () => {
+    if (!id || !report) return;
+    const blocking = report.blocking_count || 0;
+    if (blocking === 0) {
+      message.info('当前章节无阻断问题，无需修复');
+      return;
+    }
+    setPolishing(true);
+    try {
+      const result = await reviewApi.polish(id, selectedChapter);
+      message.success(
+        `修复完成！${result.data.total_changes} 处修改（${result.data.original_word_count}字→${result.data.polished_word_count}字）`
+      );
+      await loadReport(selectedChapter);
+    } catch (e: any) {
+      message.error(e?.message || '修复失败');
+    } finally {
+      setPolishing(false);
     }
   };
 
@@ -576,14 +598,26 @@ export default function ConsistencyPage() {
           <Text type="secondary">L1 硬指标 / L2 软指标 / L3 终审 — 阻断问题在 L3 裁决</Text>
         </Col>
         <Col>
-          <Button
-            type="primary"
-            icon={<ExperimentOutlined />}
-            loading={reviewing}
-            onClick={handleReview}
-          >
-            开始审查第{selectedChapter}章
-          </Button>
+          <Space>
+            <Button
+              type="primary"
+              icon={<ExperimentOutlined />}
+              loading={reviewing}
+              onClick={handleReview}
+            >
+              开始审查第{selectedChapter}章
+            </Button>
+            {report && (report.blocking_count ?? 0) > 0 && (
+              <Button
+                icon={<ToolOutlined />}
+                loading={polishing}
+                onClick={handlePolish}
+                style={{ background: '#fff2f0', borderColor: '#ff4d4f', color: '#cf1322' }}
+              >
+                一键修复 {report.blocking_count} 个阻断问题
+              </Button>
+            )}
+          </Space>
         </Col>
       </Row>
 
@@ -613,6 +647,11 @@ export default function ConsistencyPage() {
       {loadingReport && !reviewing && (
         <Card style={{ marginBottom: 14 }}>
           <Spin tip="加载审查报告..." style={{ display: 'block', textAlign: 'center', padding: 36 }} />
+        </Card>
+      )}
+      {polishing && (
+        <Card style={{ marginBottom: 14 }}>
+          <Spin tip="正在修复阻断问题（定点修复→风格适配→排版→AI味检测）..." style={{ display: 'block', textAlign: 'center', padding: 36 }} />
         </Card>
       )}
 
