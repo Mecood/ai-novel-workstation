@@ -855,3 +855,39 @@ export const plotDashboardApi = {
   get: (projectId: string) =>
     api.get<PlotDashboardData>(`/projects/${projectId}/plot/dashboard`),
 };
+
+// ── P5A: Writing Companion ────────────────────────────────────────────────
+export interface ContinueSuggestion {
+  direction: string;
+  text: string;
+  reasoning: string;
+}
+export interface InspirationIdea {
+  category: string;
+  concept: string;
+  scene_suggestion: string;
+}
+export interface CharacterReminder {
+  character_name: string;
+  last_seen_chapter: number;
+  status_note: string;
+  severity: string;
+}
+
+export const companionApi = {
+  reminders: (projectId: string, currentChapter: number) =>
+    api.get<{ reminders: CharacterReminder[] }>(
+      `/companion/char-reminders/${projectId}?current_chapter=${currentChapter}`
+    ),
+  continueSuggestions: (body: {
+    project_name: string; chapter_number: number;
+    recent_text: string; previous_context?: string;
+    worldview?: string; character_list?: string;
+  }) =>
+    api.post<{ suggestions: ContinueSuggestion[] }>(`/companion/continue-suggestions`, body),
+  inspirations: (body: {
+    project_name: string; chapter_number: number;
+    current_scene: string; worldview?: string;
+  }) =>
+    api.post<{ ideas: InspirationIdea[] }>(`/companion/inspirations`, body),
+};

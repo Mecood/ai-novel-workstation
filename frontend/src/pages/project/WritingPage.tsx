@@ -2,9 +2,10 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, InputNumber, Space, Popconfirm, Collapse, Alert, Modal, Select } from 'antd';
-import { FileTextOutlined, SyncOutlined, EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined, BookOutlined, ExperimentOutlined, MedicineBoxOutlined, BarChartOutlined, FolderOutlined, PlusOutlined } from '@ant-design/icons';
+import { FileTextOutlined, SyncOutlined, EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined, BookOutlined, ExperimentOutlined, MedicineBoxOutlined, BarChartOutlined, FolderOutlined, PlusOutlined, RobotOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import TiptapEditor from '../../components/editor/TiptapEditor';
+import WritingCompanionPanel from './components/WritingCompanionPanel';
 import { chapterApi, aiApi, foreshadowingApi, eventApi, debtApi, contractApi, DEBT_TYPE_LABELS, HOOK_TYPE_LABELS, HOOK_STRENGTH_LABELS, CONTRACT_STATUS_LABELS, COMMIT_STATUS_LABELS, EVENT_TYPE_LABELS, STAGE_LABELS, autoPipelineApi } from '../../services/api';
 import type { Chapter, StoryEvent, ReadingPowerEvalResult, ChapterContract, ChapterCommit, ChapterSkeleton, PipelineStageEvent, PipelineProgress } from '../../services/api';
 
@@ -45,6 +46,7 @@ export default function WritingPage() {
   const [lastExtractChapter, setLastExtractChapter] = useState<number>(0);
   const [selectedChapterNum, setSelectedChapterNum] = useState<number>(1);
   const [evalResult, setEvalResult] = useState<ReadingPowerEvalResult | null>(null);
+  const [companionOpen, setCompanionOpen] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [evalChapterNum, setEvalChapterNum] = useState<number>(1);
   // ── 分组 / 标签 ────────────────────────────────────────────
@@ -850,6 +852,16 @@ export default function WritingPage() {
 
         {/* 右侧写作区 */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* AI 伴侣按钮 */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              type={companionOpen ? 'primary' : 'default'}
+              icon={<RobotOutlined />}
+              onClick={() => setCompanionOpen(!companionOpen)}
+            >
+              {companionOpen ? '关闭 AI 伴侣' : 'AI 写作伴侣'}
+            </Button>
+          </div>
           {/* 流式生成区域 */}
           {streamContent && (
             <Card
@@ -956,7 +968,24 @@ export default function WritingPage() {
               <Empty description="从左侧选择章节开始编辑，或点击上方按钮 AI 生成新章节" />
             </Card>
           )}
-        </div>
+
+        {companionOpen && selectedChapter && (
+          <WritingCompanionPanel
+            projectId={id!}
+            projectName={selectedChapter.title || '未命名'}
+            chapterNumber={selectedChapter.chapter_number}
+            recentText={editingContent}
+            previousContext={previousSummary || ''}
+            worldview={''}
+            characterList={''}
+            onClose={() => setCompanionOpen(false)}
+            onInsert={(text) => {
+              setEditingContent(prev => prev + '\n\n' + text);
+              message.info('已插入续写建议到编辑器末尾');
+            }}
+          />
+        )}
+
       </div>
 
       {/* 预览弹窗 */}
