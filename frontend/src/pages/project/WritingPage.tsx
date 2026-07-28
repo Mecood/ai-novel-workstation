@@ -969,6 +969,7 @@ export default function WritingPage() {
             </Card>
           )}
         </div>
+      </div>
 
       {companionOpen && selectedChapter && (
         <WritingCompanionPanel
