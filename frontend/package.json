@@ -12,6 +12,8 @@
   "dependencies": {
     "@ant-design/icons": "^6.2.3",
     "@antv/g6": "^5.1.1",
+    "@antv/g6-extension-3d": "^0.1.23",
+    "@types/three": "^0.185.1",
     "antd": "^6.4.3",
     "axios": "^1.16.1",
     "echarts": "^6.1.0",

@@ -1,12 +1,13 @@
 // @ts-nocheck
 import { useParams } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Card, Spin, Button, Typography, Tag, Tooltip, Space, Row, Col, Empty, InputNumber, message, Tabs, Modal, List, Divider } from 'antd';
+import { Card, Spin, Button, Typography, Tag, Tooltip, Space, Row, Col, Empty, InputNumber, message, Tabs, Modal, List, Divider, Segmented } from 'antd';
 import { UsergroupAddOutlined, ReloadOutlined, ThunderboltOutlined, LinkOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react';
 import AppLayout from '../../components/layout/AppLayout';
 import { eventApi, characterApi, type Character } from '../../services/api';
 import G6CharacterGraph from '../../components/charts/G6CharacterGraph';
+import G6CharacterGraph3D from '../../components/charts/G6CharacterGraph3D';
 import type { GraphNodeData, GraphEdgeData, SourceRef } from '../../components/charts/G6CharacterGraph';
 
 const { Title, Text } = Typography;
@@ -128,6 +129,7 @@ export default function RelationshipPage() {
   const [extracting, setExtracting] = useState(false);
   const [extractChapter, setExtractChapter] = useState(1);
   const [activeTab, setActiveTab] = useState<'graph' | 'events'>('graph');
+  const [graphMode, setGraphMode] = useState<'2d' | '3d'>('2d');
   const chartRef = useRef<any>(null);
 
   // ── G6 节点/边点击 Modal 状态 ──
@@ -309,18 +311,45 @@ export default function RelationshipPage() {
       label: '角色图谱',
       children: (
         <Card size="small" style={{ marginBottom: 16 }} styles={{ body: { padding: '8px' } }}>
-          <G6CharacterGraph
-            nodes={characterGraphData.nodes}
-            edges={characterGraphData.edges}
-            loading={charLoading}
-            height={520}
-            onNodeClick={(nodeId) => {
-              setNodeModal({ open: true, nodeId });
-            }}
-            onEdgeClick={(edgeIdx) => {
-              setEdgeModal({ open: true, edgeIdx });
-            }}
-          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text strong style={{ fontSize: 13 }}>角色关系图谱</Text>
+            <Segmented
+              size="small"
+              value={graphMode}
+              onChange={(val) => setGraphMode(val as '2d' | '3d')}
+              options={[
+                { label: '2D', value: '2d' },
+                { label: '3D', value: '3d' },
+              ]}
+            />
+          </div>
+          {graphMode === '2d' ? (
+            <G6CharacterGraph
+              nodes={characterGraphData.nodes}
+              edges={characterGraphData.edges}
+              loading={charLoading}
+              height={520}
+              onNodeClick={(nodeId) => {
+                setNodeModal({ open: true, nodeId });
+              }}
+              onEdgeClick={(edgeIdx) => {
+                setEdgeModal({ open: true, edgeIdx });
+              }}
+            />
+          ) : (
+            <G6CharacterGraph3D
+              nodes={characterGraphData.nodes}
+              edges={characterGraphData.edges}
+              loading={charLoading}
+              height={520}
+              onNodeClick={(nodeId) => {
+                setNodeModal({ open: true, nodeId });
+              }}
+              onEdgeClick={(edgeIdx) => {
+                setEdgeModal({ open: true, edgeIdx });
+              }}
+            />
+          )}
         </Card>
       ),
     },
