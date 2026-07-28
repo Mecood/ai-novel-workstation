@@ -968,7 +968,6 @@ export default function WritingPage() {
               <Empty description="从左侧选择章节开始编辑，或点击上方按钮 AI 生成新章节" />
             </Card>
           )}
-        )}
         </div>
 
       {companionOpen && selectedChapter && (
