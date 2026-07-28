@@ -968,25 +968,25 @@ export default function WritingPage() {
               <Empty description="从左侧选择章节开始编辑，或点击上方按钮 AI 生成新章节" />
             </Card>
           )}
-
-        {companionOpen && selectedChapter && (
-          <WritingCompanionPanel
-            projectId={id!}
-            projectName={selectedChapter.title || '未命名'}
-            chapterNumber={selectedChapter.chapter_number}
-            recentText={editingContent}
-            previousContext={previousSummary || ''}
-            worldview={''}
-            characterList={''}
-            onClose={() => setCompanionOpen(false)}
-            onInsert={(text) => {
-              setEditingContent(prev => prev + '\n\n' + text);
-              message.info('已插入续写建议到编辑器末尾');
-            }}
-          />
         )}
+        </div>
 
-      </div>
+      {companionOpen && selectedChapter && (
+        <WritingCompanionPanel
+          projectId={id!}
+          projectName={selectedChapter.title || '未命名'}
+          chapterNumber={selectedChapter.chapter_number}
+          recentText={editingContent}
+          previousContext={previousSummary || ''}
+          worldview={''}
+          characterList={''}
+          onClose={() => setCompanionOpen(false)}
+          onInsert={(text) => {
+            setEditingContent(prev => prev + '\n\n' + text);
+            message.info('已插入续写建议到编辑器末尾');
+          }}
+        />
+      )}
 
       {/* 预览弹窗 */}
       <Modal
