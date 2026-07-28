@@ -829,3 +829,29 @@ export const backupApi = {
     });
   },
 };
+
+// ── Character Arc ──────────────────────────────────────────────────────
+export interface CharacterArcData {
+  id: string; name: string; role_type: string;
+  arc: { chapter: number; appearance: number; emotion: number; power: number; relationships: number }[];
+  issues: { type: string; msg: string; chapter: number }[];
+}
+export interface CharacterArcResult { characters: CharacterArcData[]; }
+
+export const characterArcApi = {
+  get: (projectId: string) =>
+    api.get<CharacterArcResult>(`/projects/${projectId}/characters/arc`),
+};
+
+// ── Plot Dashboard ─────────────────────────────────────────────────────
+export interface PlotDashboardData {
+  project_id: string; total_chapters: number; total_events: number;
+  protagonist_goal_journey: { chapter: number; goal: string; goal_type: string }[];
+  subplot_health: { name: string; last_chapter: number; score: number; status: string }[];
+  key_events: { chapter: number; event: string; event_type: string }[];
+}
+
+export const plotDashboardApi = {
+  get: (projectId: string) =>
+    api.get<PlotDashboardData>(`/projects/${projectId}/plot/dashboard`),
+};

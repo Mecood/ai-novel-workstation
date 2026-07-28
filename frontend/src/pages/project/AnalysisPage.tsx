@@ -12,6 +12,7 @@ const TASK_TYPES: Array<{ key: string; label: string; icon: string; desc: string
   { key: 'character_extract', label: '角色抽取', icon: '👤', desc: '角色出场·状态变化·设定一致性' },
   { key: 'timeline_extract', label: '时间线提取', icon: '⏱', desc: '事件提取·时间关系·一致性' },
   { key: 'consistency_check', label: '一致性检查', icon: '✅', desc: 'L1-L3 三层评审（现有能力）' },
+  { key: 'smart_review', label: '智能叙事评审', icon: '🧠', desc: '节奏异常·结构断裂·角色隐患·综合评分' },
 ];
 
 export default function AnalysisPage() {

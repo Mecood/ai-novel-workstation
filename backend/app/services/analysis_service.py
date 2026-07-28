@@ -74,6 +74,20 @@ TASK_PROMPTS: dict[str, dict[str, str]] = {
             '"summary":""}}'
         ),
     },
+    "smart_review": {
+        "system": (
+            "你是一位资深小说评论家。请对章节进行综合智能审查，标记节奏异常、结构断裂、角色隐患。"
+            "返回 JSON，包含：pacing(1-10)、tension(1-10)、hook(1-10)、overall_score(1-10)、"
+            "issues[{description,severity(high|warn|info),line_range}], "
+            "character_notes[{name,note}], summary(中文150字内)。只输出JSON。"
+        ),
+        "user": (
+            "【书籍概要】{project_info}\n\n"
+            "【角色档案】\n{characters_info}\n\n"
+            "【章节正文（第{chapter_number}章）】\n{chapter_text}\n\n"
+            "请对该章节进行智能叙事评审，返回严格JSON格式："
+        ),
+    },
 }
 
 

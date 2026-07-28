@@ -27,6 +27,8 @@ import AnalysisPage from './pages/project/AnalysisPage';
 import RelationshipPage from './pages/project/RelationshipPage';
 import ProjectSettingsPage from './pages/project/ProjectSettingsPage';
 import SkillsPage from './pages/project/SkillsPage';
+import CharacterArcPage from './pages/project/CharacterArcPage';
+import PlotDashboardPage from './pages/project/PlotDashboardPage';
 import SettingsPage from './pages/SettingsPage';
 import AppLayout from './components/layout/AppLayout';
 import './App.css';
@@ -80,6 +82,8 @@ function App() {
           <Route path="/projects/:id/relationships" element={<RelationshipPage />} />
           <Route path="/projects/:id/skills" element={<SkillsPage />} />
           <Route path="/projects/:id/analysis" element={<AnalysisPage />} />
+          <Route path="/projects/:id/character-arc" element={<CharacterArcPage />} />
+          <Route path="/projects/:id/plot-dashboard" element={<PlotDashboardPage />} />
           <Route path="/projects/new" element={<InitWizardPage />} />
           <Route path="/projects/:id/init-wizard" element={<InitWizardPage />} />
           <Route path="/projects/:id/import" element={<ImportPage />} />

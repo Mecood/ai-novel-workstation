@@ -3,12 +3,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSession
 from app.models.project import Project
 from app.models.character import Character
 from app.schemas.character import CharacterCreate, CharacterResponse, CharacterUpdate
 
 router = APIRouter(prefix="/projects/{project_id}/characters", tags=["characters"])
+
+@router.get("/arc")
+async def character_arc(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """返回项目所有角色的弧线数据。"""
+    try:
+        from app.services.character_arc_service import get_character_arc
+        data = await get_character_arc(db, str(project_id))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+    return data
+
 
 
 @router.post("", response_model=CharacterResponse, status_code=201)
@@ -107,5 +121,3 @@ async def update_character(
         )
     except Exception:
         pass
-
-    return CharacterResponse.model_validate(character)
