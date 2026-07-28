@@ -1,8 +1,8 @@
 // P5A: AI 写作伴侣侧面板
 import { useState, useEffect } from 'react';
 import { Card, Button, Spin, Tag, Typography, Empty, Divider } from 'antd';
-import { BulbOutlined, ForwardOutlined, ExclamationCircleOutlined, ReloadOutlined, CloseOutlined, LightbulbOutlined } from '@ant-design/icons';
-import { companionApi, type ContinueSuggestion, type InspirationIdea, type CharacterReminder } from '../../services/api';
+import { BulbOutlined, ForwardOutlined, ExclamationCircleOutlined, ReloadOutlined, CloseOutlined } from '@ant-design/icons';
+import { companionApi, type ContinueSuggestion, type InspirationIdea, type CharacterReminder } from '../../../services/api';
 
 const { Text, Title } = Typography;
 
@@ -129,7 +129,7 @@ export default function WritingCompanionPanel({
       </Card>
 
       {/* 灵感点子 */}
-      <Card size="small" title={<span><LightbulbOutlined style={{ color: '#52c41a' }} /> 灵感推荐</span>}
+      <Card size="small" title={<span><BulbOutlined style={{ color: '#52c41a' }} /> 灵感推荐</span>}
         extra={<Button type="link" size="small" icon={<ReloadOutlined />} loading={inspLoading} onClick={fetchInspirations} />}>
         {inspirations.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

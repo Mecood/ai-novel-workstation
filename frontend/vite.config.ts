@@ -20,4 +20,13 @@ export default defineConfig({
   optimizeDeps: {
     include: ['@tiptap/react', '@tiptap/starter-kit', '@tiptap/extension-underline'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'antv-g6-3d': ['@antv/g6-extension-3d'],
+        },
+      },
+    },
+  },
 });

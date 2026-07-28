@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState, useMemo } from 'react';
 import { Card, Row, Col, Statistic, Progress, List, Tag, Typography, Empty, Spin, Tooltip, Space } from 'antd';
 import {
@@ -11,6 +10,10 @@ import {
   TeamOutlined,
   NodeIndexOutlined,
   RadarChartOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  DollarOutlined,
+  FileProtectOutlined,
 } from '@ant-design/icons';
 import type { Project } from '../../../services/api';
 import { projectApi, chapterApi, characterApi, foreshadowingApi, reviewApi, debtApi, contractApi } from '../../../services/api';

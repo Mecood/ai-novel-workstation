@@ -1,14 +1,19 @@
-// @ts-nocheck
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { useParams } from 'react-router-dom';
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Card, Spin, Button, Typography, Tag, Tooltip, Space, Row, Col, Empty, InputNumber, message, Tabs, Modal, List, Divider, Segmented } from 'antd';
 import { UsergroupAddOutlined, ReloadOutlined, ThunderboltOutlined, LinkOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react';
 import AppLayout from '../../components/layout/AppLayout';
 import { eventApi, characterApi, type Character } from '../../services/api';
-import G6CharacterGraph from '../../components/charts/G6CharacterGraph';
-import G6CharacterGraph3D from '../../components/charts/G6CharacterGraph3D';
+import EChartsCharacterGraph from '../../components/charts/EChartsCharacterGraph';
 import type { GraphNodeData, GraphEdgeData, SourceRef } from '../../components/charts/G6CharacterGraph';
+
+// 3D 模式懒加载，失败时降级到 2D
+const G6CharacterGraph3D = lazy(() =>
+  import('../../components/charts/G6CharacterGraph3D').catch(() => ({
+    default: () => <div style={{ padding: 40, textAlign: 'center', color: '#999' }}>3D 图谱加载失败，请使用 2D 模式</div>,
+  }))
+);
 
 const { Title, Text } = Typography;
 
@@ -142,6 +147,9 @@ export default function RelationshipPage() {
     [nodeModal.nodeId, characters],
   );
 
+  // ── 角色图谱数据（从 characters API 构建）─ 必须在使用它的 useMemo 之前定义 ──
+  const characterGraphData = useMemo(() => buildCharacterGraphData(characters), [characters]);
+
   // 与当前选中节点相关的边
   const nodeEdges = useMemo(() => {
     if (!nodeModal.nodeId) return [];
@@ -202,9 +210,6 @@ export default function RelationshipPage() {
       setExtracting(false);
     }
   };
-
-  // ── G6 图谱数据（从 characters API 构建） ──
-  const characterGraphData = useMemo(() => buildCharacterGraphData(characters), [characters]);
 
   // ECharts 关系图配置
   const graphOption = data && data.nodes.length
@@ -324,7 +329,7 @@ export default function RelationshipPage() {
             />
           </div>
           {graphMode === '2d' ? (
-            <G6CharacterGraph
+            <EChartsCharacterGraph
               nodes={characterGraphData.nodes}
               edges={characterGraphData.edges}
               loading={charLoading}
@@ -337,18 +342,20 @@ export default function RelationshipPage() {
               }}
             />
           ) : (
-            <G6CharacterGraph3D
-              nodes={characterGraphData.nodes}
-              edges={characterGraphData.edges}
-              loading={charLoading}
-              height={520}
-              onNodeClick={(nodeId) => {
-                setNodeModal({ open: true, nodeId });
-              }}
-              onEdgeClick={(edgeIdx) => {
-                setEdgeModal({ open: true, edgeIdx });
-              }}
-            />
+            <Suspense fallback={<div style={{ textAlign: 'center', padding: 120 }}><Spin size="large" /></div>}>
+              <G6CharacterGraph3D
+                nodes={characterGraphData.nodes}
+                edges={characterGraphData.edges}
+                loading={charLoading}
+                height={520}
+                onNodeClick={(nodeId) => {
+                  setNodeModal({ open: true, nodeId });
+                }}
+                onEdgeClick={(edgeIdx) => {
+                  setEdgeModal({ open: true, edgeIdx });
+                }}
+              />
+            </Suspense>
           )}
         </Card>
       ),

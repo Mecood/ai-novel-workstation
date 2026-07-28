@@ -1,30 +1,32 @@
 import { useRef, useEffect } from 'react';
 import type { GraphOptions } from '@antv/g6';
-import { Graph, ExtensionCategory, register } from '@antv/g6';
-import {
-  Sphere,
-  Line3D,
-  Light,
-  renderer,
-  DragCanvas3D,
-  ObserveCanvas3D,
-  ZoomCanvas3D,
-  D3Force3DLayout,
-} from '@antv/g6-extension-3d';
 import { Empty, Spin } from 'antd';
 import type { GraphNodeData, GraphEdgeData } from './G6CharacterGraph';
 
+// ── 懒加载 G6 运行时（避免静态 import 把 @antv/g6 的循环依赖带进主 bundle）──
+let _G6: any = null;
+async function loadG6() {
+  if (_G6) return _G6;
+  const [g6, g63d] = await Promise.all([
+    import('@antv/g6'),
+    import('@antv/g6-extension-3d'),
+  ]);
+  _G6 = { ...g6, ...g63d };
+  return _G6;
+}
+
 // ── 注册 3D 扩展元素 ──
 let registered = false;
-function ensure3DRegistered() {
+async function ensure3DRegistered() {
   if (registered) return;
-  register(ExtensionCategory.NODE, 'sphere', Sphere);
-  register(ExtensionCategory.EDGE, 'line3d', Line3D);
-  register(ExtensionCategory.PLUGIN, '3d-light', Light);
-  register(ExtensionCategory.BEHAVIOR, 'drag-canvas-3d', DragCanvas3D);
-  register(ExtensionCategory.BEHAVIOR, 'observe-canvas-3d', ObserveCanvas3D);
-  register(ExtensionCategory.BEHAVIOR, 'zoom-canvas-3d', ZoomCanvas3D);
-  register(ExtensionCategory.LAYOUT, 'd3-force-3d', D3Force3DLayout as any);
+  const G6 = await loadG6();
+  G6.register(G6.ExtensionCategory.NODE, 'sphere', G6.Sphere);
+  G6.register(G6.ExtensionCategory.EDGE, 'line3d', G6.Line3D);
+  G6.register(G6.ExtensionCategory.PLUGIN, '3d-light', G6.Light);
+  G6.register(G6.ExtensionCategory.BEHAVIOR, 'drag-canvas-3d', G6.DragCanvas3D);
+  G6.register(G6.ExtensionCategory.BEHAVIOR, 'observe-canvas-3d', G6.ObserveCanvas3D);
+  G6.register(G6.ExtensionCategory.BEHAVIOR, 'zoom-canvas-3d', G6.ZoomCanvas3D);
+  G6.register(G6.ExtensionCategory.LAYOUT, 'd3-force-3d', G6.D3Force3DLayout as any);
   registered = true;
 }
 
@@ -91,169 +93,181 @@ export default function G6CharacterGraph3D({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    ensure3DRegistered();
+    let cancelled = false;
+    const graphRef: { current: any } = { current: null };
 
-    if (nodes.length === 0) return;
+    (async () => {
+      // 动态加载 G6 运行时
+      await ensure3DRegistered();
+      if (cancelled || !containerRef.current) return;
+      const G6 = await loadG6();
 
-    // 构建 G6 数据
-    const g6Nodes = nodes.map((n) => ({
-      id: n.id,
-      data: {
-        label: n.label,
-        roleType: n.roleType,
-        background: n.background,
-      },
-      style: {
-        radius: n.nodeSize ? n.nodeSize / 2 : roleSphereRadius(n.roleType || ''),
-        materialType: 'phong',
-        fill: n.nodeColor || ROLE_COLORS[n.roleType || ''] || ROLE_COLORS.普通,
-        labelText: n.label,
-        labelFontSize: 12,
-        labelFill: '#fff',
-        labelOffsetY: 40,
-      },
-    }));
+      if (nodes.length === 0) return;
 
-    const g6Edges = edges.map((e, i) => ({
-      id: `edge-${i}`,
-      source: e.source,
-      target: e.target,
-      data: {
-        label: e.label,
-        sourceName: e.sourceName,
-        targetName: e.targetName,
-        description: e.description,
-        sourceRefs: e.sourceRefs,
-        edgeIndex: i,
-      },
-      style: {
-        stroke: relColor(e.label),
-        lineWidth: 2,
-        labelText: e.label,
-        labelFontSize: 10,
-        labelFill: relColor(e.label),
-        labelBackground: true,
-        labelBackgroundFill: '#fff',
-        labelBackgroundOpacity: 0.85,
-        labelBackgroundRadius: 3,
-        labelBackgroundPadding: [2, 4],
-      },
-    }));
-
-    const graph = new Graph({
-      container: containerRef.current,
-      width: containerRef.current.clientWidth,
-      height,
-      animation: true,
-      renderer,
-      data: {
-        nodes: g6Nodes,
-        edges: g6Edges,
-      },
-      layout: {
-        type: 'd3-force-3d',
-        link: {
-          distance: 200,
+      // 构建 G6 数据
+      const g6Nodes = nodes.map((n) => ({
+        id: n.id,
+        data: {
+          label: n.label,
+          roleType: n.roleType,
+          background: n.background,
         },
-        collide: {
-          radius: 30,
-          strength: 1,
-        },
-        manyBody: {
-          strength: -800,
-        },
-        center: {
-          strength: 0.1,
-        },
-      },
-      node: {
-        type: 'sphere',
         style: {
-          material: 'phong' as any,
+          radius: n.nodeSize ? n.nodeSize / 2 : roleSphereRadius(n.roleType || ''),
+          materialType: 'phong',
+          fill: n.nodeColor || ROLE_COLORS[n.roleType || ''] || ROLE_COLORS.普通,
+          labelText: n.label,
+          labelFontSize: 12,
+          labelFill: '#fff',
+          labelOffsetY: 40,
         },
-      },
-      edge: {
-        type: 'line3d',
+      }));
+
+      const g6Edges = edges.map((e, i) => ({
+        id: `edge-${i}`,
+        source: e.source,
+        target: e.target,
+        data: {
+          label: e.label,
+          sourceName: e.sourceName,
+          targetName: e.targetName,
+          description: e.description,
+          sourceRefs: e.sourceRefs,
+          edgeIndex: i,
+        },
         style: {
-          stroke: '#8c8c8c',
+          stroke: relColor(e.label),
+          lineWidth: 2,
+          labelText: e.label,
+          labelFontSize: 10,
+          labelFill: relColor(e.label),
+          labelBackground: true,
+          labelBackgroundFill: '#fff',
+          labelBackgroundOpacity: 0.85,
+          labelBackgroundRadius: 3,
+          labelBackgroundPadding: [2, 4],
         },
-      },
-      behaviors: [
-        { type: 'observe-canvas-3d', trigger: 'right' },
-        'zoom-canvas-3d',
-        { type: 'drag-canvas-3d', trigger: 'left' },
-      ],
-      plugins: [
-        {
-          type: 'camera-setting',
-          projectionMode: 'perspective',
-          near: 0.1,
-          far: 10000,
-          fov: 45,
-          aspect: 'auto' as const,
-          distance: 800,
-          azimuth: 0,
-          elevation: 30,
+      }));
+
+      const graph = new G6.Graph({
+        container: containerRef.current,
+        width: containerRef.current.clientWidth,
+        height,
+        animation: true,
+        renderer: G6.renderer,
+        data: {
+          nodes: g6Nodes,
+          edges: g6Edges,
         },
-        {
-          type: '3d-light',
-          directional: {
-            direction: [0, 0, 1],
+        layout: {
+          type: 'd3-force-3d',
+          link: {
+            distance: 200,
           },
-          ambient: {
-            intensity: 0.6,
+          collide: {
+            radius: 30,
+            strength: 1,
+          },
+          manyBody: {
+            strength: -800,
+          },
+          center: {
+            strength: 0.1,
           },
         },
-      ],
-      autoFit: 'view',
-      padding: [30, 30, 30, 30],
-      background: '#1a1a2e',
-    });
+        node: {
+          type: 'sphere',
+          style: {
+            material: 'phong' as any,
+          },
+        },
+        edge: {
+          type: 'line3d',
+          style: {
+            stroke: '#8c8c8c',
+          },
+        },
+        behaviors: [
+          { type: 'observe-canvas-3d', trigger: 'right' },
+          'zoom-canvas-3d',
+          { type: 'drag-canvas-3d', trigger: 'left' },
+        ],
+        plugins: [
+          {
+            type: 'camera-setting',
+            projectionMode: 'perspective',
+            near: 0.1,
+            far: 10000,
+            fov: 45,
+            aspect: 'auto' as const,
+            distance: 800,
+            azimuth: 0,
+            elevation: 30,
+          },
+          {
+            type: '3d-light',
+            directional: {
+              direction: [0, 0, 1],
+            },
+            ambient: {
+              intensity: 0.6,
+            },
+          },
+        ],
+        autoFit: 'view',
+        padding: [30, 30, 30, 30],
+        background: '#1a1a2e',
+      });
 
-    // 节点点击事件
-    graph.on('node:click', (evt: any) => {
-      const nodeId = evt?.target?.id;
-      if (nodeId && onNodeClick) {
-        onNodeClick(nodeId);
-      }
-    });
+      graphRef.current = graph;
 
-    // 边点击事件
-    graph.on('edge:click', (evt: any) => {
-      const edgeData = evt?.target?.data;
-      if (edgeData && onEdgeClick) {
-        onEdgeClick(edgeData.edgeIndex);
-      }
-    });
+      // 节点点击事件
+      graph.on('node:click', (evt: any) => {
+        const nodeId = evt?.target?.id;
+        if (nodeId && onNodeClick) {
+          onNodeClick(nodeId);
+        }
+      });
 
-    // Async render to ensure proper sizing
-    requestAnimationFrame(() => {
-      try {
-        graph.render();
-      } catch (err) {
-        console.error('G6 3D graph render error:', err);
-      }
-    });
+      // 边点击事件
+      graph.on('edge:click', (evt: any) => {
+        const edgeData = evt?.target?.data;
+        if (edgeData && onEdgeClick) {
+          onEdgeClick(edgeData.edgeIndex);
+        }
+      });
 
-    const handleResize = () => {
-      if (containerRef.current) {
-        const w = containerRef.current.clientWidth;
+      // Async render to ensure proper sizing
+      requestAnimationFrame(() => {
         try {
-          graph.setSize(w, height);
+          graph.render();
+        } catch (err) {
+          console.error('G6 3D graph render error:', err);
+        }
+      });
+
+      const handleResize = () => {
+        if (containerRef.current) {
+          const w = containerRef.current.clientWidth;
+          try {
+            graph.setSize(w, height);
+          } catch {
+            // ignore
+          }
+        }
+      };
+
+      window.addEventListener('resize', handleResize);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (graphRef.current) {
+        try {
+          graphRef.current.destroy();
         } catch {
           // ignore
         }
-      }
-    };
-
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      try {
-        graph.destroy();
-      } catch {
-        // ignore
       }
     };
   }, [nodes, edges, height, onNodeClick, onEdgeClick]);

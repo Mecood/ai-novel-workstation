@@ -209,7 +209,7 @@ export default function InitWizardPage() {
 
   // 步骤 4: 初始化
   const startInit = async () => {
-    const pid = projectId;
+    let pid = projectId;
     if (!pid) {
       const res = await projectApi.create({ name: projectName, genre, description: '' });
       pid = res.data.id;
