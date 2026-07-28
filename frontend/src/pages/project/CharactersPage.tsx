@@ -1,26 +1,30 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { Card, Spin, message, Button, Typography, Tag, Descriptions, Empty, Avatar, Alert } from 'antd';
+import { Card, Spin, message, Button, Typography, Tag, Descriptions, Empty, Avatar, Alert, Space } from 'antd';
 import { ThunderboltOutlined, UserOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import { characterApi, aiApi } from '../../services/api';
-import type { Character } from '../../services/api';
+import type { Character, StaleReport } from '../../services/api';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 export default function CharactersPage() {
   const { id } = useParams<{ id: string }>();
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [staleReport, setStaleReport] = useState<StaleReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
   const fetchData = () => {
     if (!id) return;
     setLoading(true);
-    characterApi
-      .list(id)
-      .then(({ data }) => {
-        setCharacters(Array.isArray(data) ? data : []);
+    Promise.all([
+      characterApi.list(id).then(r => r.data),
+      characterApi.staleReport(id).then(r => r.data).catch(() => null),
+    ])
+      .then(([chars, report]) => {
+        setCharacters(Array.isArray(chars) ? chars : []);
+        setStaleReport(report);
       })
       .catch(() => {
         message.error('加载角色失败');
@@ -90,12 +94,31 @@ export default function CharactersPage() {
             alignItems: 'start',
           }}
         >
-          {(characters[0] as any)?._stale === 'true' && (
+          {(characters[0] as any)?._stale === 'true' && staleReport && (
             <Alert
               type="warning"
-              message="上游已变化，角色数据可能不一致，建议重新生成"
               showIcon
               style={{ marginBottom: 16, gridColumn: '1 / -1' }}
+              message={
+                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                  <Text strong style={{ fontSize: 14 }}>
+                    上游数据已变更 — {staleReport.message}
+                  </Text>
+                  {staleReport.changed_names.length > 0 && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      变更来源：{staleReport.changed_names.join('、')}
+                    </Text>
+                  )}
+                  {staleReport.affected_chapters.length > 0 && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      受影响章节：{staleReport.affected_chapters.map(c => `第${c.chapter_number}章`).join('、')}
+                    </Text>
+                  )}
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    推荐操作：重新生成角色以同步最新设定
+                  </Text>
+                </Space>
+              }
             />
           )}
           {characters.map((c) => (

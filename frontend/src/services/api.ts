@@ -127,9 +127,17 @@ export interface Character {
   created_at: string;
 }
 
+export interface StaleReport {
+  changed_entity: string;
+  changed_names: string[];
+  affected_chapters: { chapter_number: number; chapter_id: string }[];
+  message: string;
+}
 export const characterApi = {
   list: (projectId: string) =>
     api.get<Character[]>(`/projects/${projectId}/characters`),
+  staleReport: (projectId: string) =>
+    api.get<StaleReport>(`/projects/${projectId}/characters/stale-report`),
 };
 
 // === Chapter ===
