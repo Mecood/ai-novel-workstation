@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Button, Spin, Tag, Typography, Empty, Divider } from 'antd';
 import { BulbOutlined, ForwardOutlined, ExclamationCircleOutlined, ReloadOutlined, CloseOutlined, LightbulbOutlined } from '@ant-design/icons';
-import { companionApi, type ContinueSuggestion, type InspirationIdea, type CharacterReminder } from '../../../services/api';
+import { companionApi, type ContinueSuggestion, type InspirationIdea, type CharacterReminder } from '../../services/api';
 
 const { Text, Title } = Typography;
 
