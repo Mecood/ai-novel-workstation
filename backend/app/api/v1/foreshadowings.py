@@ -27,7 +27,7 @@ async def create_foreshadowing(
     foreshadowing = Foreshadowing(
         project_id=project_id,
         title=data.title,
-        description=data.description,
+        description=data.description or "",
         target_chapter=data.target_chapter,
         status=data.status,
         evidence_line=data.evidence_line,

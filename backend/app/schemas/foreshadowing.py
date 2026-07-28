@@ -6,7 +6,7 @@ from uuid import UUID
 
 class ForeshadowingCreate(BaseModel):
     title: str
-    description: str
+    description: Optional[str] = None
     target_chapter: Optional[int] = None
     status: str = "planted"
     # 证据链

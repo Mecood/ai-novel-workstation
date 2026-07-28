@@ -676,13 +676,14 @@ export const reviewApi = {
 
 // ── Events ────────────────────────────────────────────────────────────
 export const EVENT_TYPE_LABELS: Record<string, string> = { plot: '剧情', character: '角色', worldview: '世界观', hook: '钩子', resolution: '收束', twist: '反转', reveal: '揭露', conflict: '冲突', emotion: '情感', milestone: '里程碑' };
-export interface StoryEvent { id: string; project_id: string; chapter_number: number; event_type: string; description: string; importance: number; involved_characters: string[]; related_events: string[]; created_at: string; [key: string]: any; }
-export interface EventTimeline { chapters: number[]; events: Record<string, StoryEvent[]>; }
+export interface StoryEvent { id: string; project_id: string; chapter_number: number; event_type: string; event_type_label?: string; title: string; description: string; entities: string[]; character_ids: string[]; confidence: number; evidence?: string; order: number; timeline_track: string; created_at: string; }
+export interface EventTimeline { chapters: number[]; events_per_chapter: number[]; events: StoryEvent[]; }
+export interface EventListResponse { items: StoryEvent[]; total: number; }
 export const eventApi = {
   list: (projectId: string, params?: { event_type?: string }) =>
-    api.get<StoryEvent[]>(`/projects/${projectId}/events${params ? `?event_type=${params.event_type}` : ''}`),
+    api.get<EventListResponse>(`/projects/${projectId}/events` + (params?.event_type ? `?event_type=${params.event_type}` : '')),
   getTimeline: (projectId: string, params?: { event_type?: string }) =>
-    api.get<EventTimeline>(`/projects/${projectId}/events/timeline${params ? `?event_type=${params.event_type}` : ''}`),
+    api.get<EventTimeline>(`/projects/${projectId}/events/timeline` + (params?.event_type ? `?event_type=${params.event_type}` : '')),
   extract: (projectId: string, chapterNumber: number) => api.post<{ events: StoryEvent[] }>(`/projects/${projectId}/events/extract/${chapterNumber}`),
   triggerExtract: (projectId: string, chapterNumber: number, onSSE: (data: any) => void) => {
     return fetch(`${API_BASE}/projects/${projectId}/events/${chapterNumber}/extract`, { method: 'POST' })
@@ -703,8 +704,9 @@ export const eventApi = {
   },
   getRelationships: (projectId: string) =>
     api.get<{ nodes: { id: string; name: string; role_type: string }[]; edges: { source_id: string; target_id: string; source_name: string; target_name: string; relationship: string; chapter: number; description: string; created_at: string }[]; timeline: { chapter: number; event: string; description: string; entities: string[]; created_at: string }[]; node_count: number; edge_count: number }>(`/projects/${projectId}/events/relationships`),
+  updateEvent: (projectId: string, eventId: string, body: { order?: number; timeline_track?: string }) =>
+    api.patch<StoryEvent>(`/projects/${projectId}/events/${eventId}`, body),
 };
-
 // ── Debt ──────────────────────────────────────────────────────────────
 export const DEBT_TYPE_LABELS: Record<string, string> = { hook: '钩子', pacing: '节奏', payoff: '兑现', character: '角色', gap: '断更' };
 export const DEBT_STATUS_LABELS: Record<string, string> = { active: '活跃', accrued: '计息', overdue: '逾期', cancelled: '已取消' };

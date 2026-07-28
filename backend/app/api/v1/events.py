@@ -19,6 +19,12 @@ router = APIRouter(prefix="/projects/{project_id}/events", tags=["events"])
 ai_service = AIService()
 extraction_service = ExtractionService(ai_service)
 
+from pydantic import BaseModel
+
+
+class EventUpdate(BaseModel):
+    order: int | None = None
+
 
 # ── 1) 触发提取（SSE 流） ───────────────────────────────────────────────
 @router.post("/{chapter_number}/extract")
@@ -208,3 +214,26 @@ async def get_relationships(
         "node_count": len(nodes),
         "edge_count": len(edges),
     }
+
+
+# ── 6) 更新事件（order / timeline_track） ──────────────────────────────
+@router.patch("/{event_id}")
+async def update_event(
+    project_id: UUID,
+    event_id: UUID,
+    body: EventUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(404, "Project not found")
+    event = await db.get(StoryEvent, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if event.project_id != project_id:
+        raise HTTPException(403, "Event does not belong to this project")
+    if body.order is not None:
+        event.order = body.order
+    await db.commit()
+    await db.refresh(event)
+    return extraction_service._event_to_dict(event)

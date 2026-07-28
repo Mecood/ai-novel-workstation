@@ -116,7 +116,7 @@ class ExtractionService:
         total_q = select(func.count()).select_from(q.subquery())
         total = (await db.execute(total_q)).scalar() or 0
 
-        items_q = q.order_by(StoryEvent.chapter_number, StoryEvent.order,
+        items_q = q.order_by(StoryEvent.chapter_number,
                              StoryEvent.created_at).offset(offset).limit(limit)
         items = (await db.execute(items_q)).scalars().all()
 
@@ -139,7 +139,7 @@ class ExtractionService:
         q = select(StoryEvent).where(StoryEvent.project_id == project_id)
         if event_types:
             q = q.where(StoryEvent.event_type.in_(event_types))
-        items_q = q.order_by(StoryEvent.chapter_number, StoryEvent.order)
+        items_q = q.order_by(StoryEvent.chapter_number, StoryEvent.created_at)
         items = (await db.execute(items_q)).scalars().all()
 
         chapters = sorted(set(e.chapter_number for e in items))
