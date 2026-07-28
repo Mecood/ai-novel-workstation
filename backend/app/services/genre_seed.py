@@ -714,12 +714,13 @@ GENRE_TEMPLATES = [
 ]
 
 
-def seed_templates(db):
+async def seed_templates(db):
     """将模板导入数据库，幂等（name unique，重复调用不报错）。"""
     from sqlalchemy import select
     from app.models.genre_template import GenreTemplate
 
-    existing = {t.name for t in db.execute(select(GenreTemplate)).scalars().all()}
+    result = await db.execute(select(GenreTemplate))
+    existing = {t.name for t in result.scalars().all()}
     inserted = 0
     for tmpl in GENRE_TEMPLATES:
         if tmpl["name"] in existing:

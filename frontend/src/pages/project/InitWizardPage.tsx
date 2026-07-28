@@ -549,10 +549,10 @@ export default function InitWizardPage() {
                 </Space>
               </Card>
               <Progress
-                percent={progress.status === 'completed' ? 100 : progress.status === 'running' ? 50 : 0}
-                active={progress.status === 'running' ? 'active' : 'normal'}
-                format={<Text type="secondary">{progress.step}</Text>
-              />
+                              percent={progress.status === 'completed' ? 100 : progress.status === 'running' ? 50 : 0}
+                              active={progress.status === 'running' ? 'active' : 'normal'}
+                              format={() => <Text type="secondary">{progress.step}</Text>}
+                            />
               {errors && <Alert message="错误" error={errors} type="error" showIcon />}
             </Space>
           )}
@@ -563,10 +563,11 @@ export default function InitWizardPage() {
               <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a' }} />
               <Title level={4} style={{ marginTop: 12 }}>初始化完成！</Title>
               <Paragraph>
-                故事核心、世界观、人物和大纲已生成。
-                {progress.skipped_steps?.length > 0
-                  && <Text type="secondary">其余步骤已跳过。</Text>
-              </Paragraph>
+                              故事核心、世界观、人物和大纲已生成。
+                              {progress.skipped_steps?.length > 0 && (
+                                <Text type="secondary">其余步骤已跳过。</Text>
+                              )}
+                            </Paragraph>
             </div>
           )}
 
