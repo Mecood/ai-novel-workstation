@@ -779,7 +779,7 @@ export const autoPipelineApi = {
 // ── Search ────────────────────────────────────────────────────────────
 export interface SearchResult { id: string; content: string; source: string; score: number; metadata: any; }
 export const searchApi = {
-  search: (projectId: string, query: string, topK?: number) => api.post<{ results: SearchResult[]; total: number }>(`/projects/${projectId}/search`, { query, top_k: topK || 5 }),
+  search: (projectId: string, query: string, topK?: number, useRerank?: boolean) => api.post<{ results: SearchResult[]; total: number }>(`/projects/${projectId}/search`, { query, top_k: topK || 5, use_rerank: useRerank ?? true }),
   getContext: (projectId: string, topic: string) => api.get<{ context: string }>(`/projects/${projectId}/search/context`, { params: { topic } }),
   indexContent: (projectId: string, contentType: string) => api.post<{ indexed: number; content_type: string }>(`/projects/${projectId}/search/index/${contentType}`),
 };
