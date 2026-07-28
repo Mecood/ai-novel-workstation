@@ -109,7 +109,30 @@ async def generate_style_variants(
         }
 
     return {
-        "genre": genre_key,
-        "variant_count": len(variants),
-        "variants": variants,
-    }
+            "genre": genre_key,
+            "variant_count": len(variants),
+            "variants": variants,
+        }
+
+
+    @router.post("/apply")
+    async def apply_style(
+        project_id: str,
+        db: Annotated[AsyncSession, Depends(get_db)],
+        prompt: str = Query(""),
+    ):
+        """将风格 prompt 应用到项目（写入 context.style_prompt）"""
+        project = await db.get(Project, project_id)
+        if not project:
+            raise HTTPException(404, "Project not found")
+        if not prompt.strip():
+            raise HTTPException(400, "必须提供 style prompt")
+        ctx = dict(project.context or {})
+        ctx["style_prompt"] = prompt
+        project.context = ctx
+        await db.commit()
+        return {
+            "status": "applied",
+            "project_id": project_id,
+            "style_prompt": prompt,
+        }

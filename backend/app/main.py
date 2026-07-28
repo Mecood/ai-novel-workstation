@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.api.v1 import projects, worldviews, characters, chapters, foreshadowings, generation, knowledges, settings as settings_router, story_core, volumes, prompt_templates, search, reviews, events, debts, contracts, pipeline, auto_pipeline, templates, creative, style, init, deconstruction, skills, agent, export, versions, assets
+from app.api.v1 import projects, worldviews, characters, chapters, foreshadowings, generation, knowledges, settings as settings_router, story_core, volumes, prompt_templates, search, reviews, events, debts, contracts, pipeline, auto_pipeline, templates, creative, style, init, deconstruction, skills, agent, export, versions, assets, topic_research
 
 
 @asynccontextmanager
@@ -61,6 +61,7 @@ app.include_router(skills.project_skills_router, prefix=settings.API_PREFIX)
 app.include_router(export.router, prefix=settings.API_PREFIX)
 app.include_router(agent.router, prefix=settings.API_PREFIX)
 app.include_router(assets.router, prefix=settings.API_PREFIX)
+app.include_router(topic_research.router, prefix=settings.API_PREFIX)
 
 @app.get("/health")
 async def health_check():

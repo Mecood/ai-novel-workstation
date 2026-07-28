@@ -335,7 +335,16 @@ export default function StylePage() {
           {standalone ? (
             <Card
               title={<><EditOutlined style={{ marginRight: 6 }} />风格指导输出</>}
-              extra={localResult && <Button size="small" onClick={() => handleCopy(localResult.stylePrompt)}>复制 Prompt</Button>}
+              extra={
+                localResult && (
+                  <Space>
+                    <Button size="small" onClick={() => handleCopy(localResult.stylePrompt)}>复制 Prompt</Button>
+                    <Button size="small" type="primary" onClick={() => navigator.clipboard.writeText(localResult.stylePrompt)}>
+                      应用于草稿
+                    </Button>
+                  </Space>
+                )
+              }
             >
               {!localResult ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>

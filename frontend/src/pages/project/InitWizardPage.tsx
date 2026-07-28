@@ -1,8 +1,14 @@
 // @ts-nocheck
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Steps, Button, Select, Input, Space, message, Typography, Divider, Spin, Alert, Progress, Form, Row, Col } from 'antd';
-import { RocketOutlined, BookOutlined, ThunderboltOutlined, CheckCircleOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import {
+  Card, Steps, Button, Select, Input, Space, message, Typography,
+  Divider, Spin, Alert, Progress, Form, Row, Col, Tag, List, Badge,
+} from 'antd';
+import {
+  RocketOutlined, BookOutlined, ThunderboltOutlined, CheckCircleOutlined,
+  PlayCircleOutlined, SearchOutlined, BulbOutlined, LayoutOutlined,
+} from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import { api, projectApi, templateApi } from '../../services/api';
 import type { GenreTemplate } from '../../services/api';
@@ -10,48 +16,93 @@ import type { GenreTemplate } from '../../services/api';
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
 
-const WIZARD_STEPS_NEW = [
-  { key: 0, title: '项目与题材' },
-  { key: 1, title: '主题与风格' },
-  { key: 2, title: '参考书拆解（可选）' },
-  { key: 3, title: '开始初始化' },
-  { key: 4, title: '完成' },
-];
-
-const WIZARD_STEPS_EXISTING = [
-  { key: 0, title: '选择题材' },
-  { key: 1, title: '主题与风格' },
-  { key: 2, title: '参考书拆解（可选）' },
-  { key: 3, title: '开始初始化' },
-  { key: 4, title: '完成' },
+// 新的步骤定义
+const WIZARD_STEPS = [
+  { key: 0, title: '项目与题材', icon: <BookOutlined /> },
+  { key: 1, title: '选题调研', icon: <SearchOutlined /> },
+  { key: 2, title: '创意激发', icon: <BulbOutlined /> },
+  { key: 3, title: '风格设定', icon: <RocketOutlined /> },
+  { key: 4, title: '开始初始化', icon: <ThunderboltOutlined /> },
+  { key: 5, title: '完成', icon: <CheckCircleOutlined /> },
 ];
 
 const DEFAULT_GENRES = [
   '仙侠', '武侠', '玄幻', '科幻', '悬疑', '都市', '言情', '历史', '奇幻', '冒险',
 ];
 
+// 本地创意种子池（复刻 CreativePage）
+const SEED_POOLS: Record<string, string[]> = {
+  '角色原型': [
+    '天降异人', '破局者', '复仇者', '觉醒者', '导师型', '双面人', '卧底者', '逆命者', '轮回者', '失忆者',
+  ],
+  '场景类型': [
+    '末世废墟', '学府试炼', '星际漂流', '都市暗巷', '深山门派', '海上飞舟', '时空夹层', '古文明秘境', '幻境战场', '永恒之都',
+  ],
+  '冲突类型': [
+    '天选 vs 宿命', '信仰 vs 理性', '复仇 vs 救赎', '秩序 vs 混沌', '团结 vs 阴谋',
+    '进化 vs 人性', '公开 vs 秘密', '传统 vs 革新', '权力 vs 责任', '私情 vs 道义',
+  ],
+  '主题方向': [
+    '秩序与混沌', '超越极限', '遗忘与传承', '记忆与轮回', '东西方融合',
+    '炎冰平衡', '禁术与生存', '梦想与现实', '隔阂与创伤', '生与死的定义',
+  ],
+  '结构框架': [
+    '经典3幕剧', '双线汇合', '火焰金字塔', '倒叙悬疑', '群像实验',
+    '血脉传承', '双面叙事', '时空夹层', '连续余波', '十字路口',
+  ],
+};
+
+const GENRE_STYLE_PARAMS: Record<string, Record<string, number>> = {
+  '仙侠': { vocabulary_density: 0.7, rhythm: 0.6, sentence_style: 0.65, rhetoric_level: 0.85, emotional_temperature: 0.7, dialogue_ratio: 0.45 },
+  '武侠': { vocabulary_density: 0.55, rhythm: 0.75, sentence_style: 0.55, rhetoric_level: 0.6, emotional_temperature: 0.55, dialogue_ratio: 0.55 },
+  '玄幻': { vocabulary_density: 0.75, rhythm: 0.8, sentence_style: 0.7, rhetoric_level: 0.75, emotional_temperature: 0.8, dialogue_ratio: 0.4 },
+  '科幻': { vocabulary_density: 0.7, rhythm: 0.5, sentence_style: 0.6, rhetoric_level: 0.45, emotional_temperature: 0.35, dialogue_ratio: 0.45 },
+  '悬疑': { vocabulary_density: 0.5, rhythm: 0.85, sentence_style: 0.65, rhetoric_level: 0.4, emotional_temperature: 0.3, dialogue_ratio: 0.55 },
+  '都市': { vocabulary_density: 0.5, rhythm: 0.6, sentence_style: 0.5, rhetoric_level: 0.35, emotional_temperature: 0.55, dialogue_ratio: 0.65 },
+  '言情': { vocabulary_density: 0.55, rhythm: 0.5, sentence_style: 0.5, rhetoric_level: 0.7, emotional_temperature: 0.85, dialogue_ratio: 0.7 },
+  '历史': { vocabulary_density: 0.65, rhythm: 0.4, sentence_style: 0.75, rhetoric_level: 0.55, emotional_temperature: 0.5, dialogue_ratio: 0.45 },
+  '奇幻': { vocabulary_density: 0.7, rhythm: 0.7, sentence_style: 0.65, rhetoric_level: 0.8, emotional_temperature: 0.7, dialogue_ratio: 0.45 },
+  '冒险': { vocabulary_density: 0.5, rhythm: 0.85, sentence_style: 0.55, rhetoric_level: 0.45, emotional_temperature: 0.7, dialogue_ratio: 0.55 },
+};
+
+function pick<T>(arr: T[], n: number): T[] {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(n, arr.length));
+}
+
 export default function InitWizardPage() {
   const { id: existingId } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // For /projects/new route we create project; for /projects/:id/init-wizard we use existing
   const isCreating = !existingId;
 
   const [loading, setLoading] = useState(isCreating ? false : true);
-  const [project, setProject] = useState(null);
+  const [project, setProject] = useState<any>(null);
   const [projectId, setProjectId] = useState(existingId || '');
-  const [templates, setTemplates] = useState([]);
+  const [templates, setTemplates] = useState<any[]>([]);
 
-  // Form state
+  // 步骤
   const [step, setStep] = useState(0);
   const [projectName, setProjectName] = useState('');
   const [genre, setGenre] = useState('');
   const [genreTemplate, setGenreTemplate] = useState<GenreTemplate | null>(null);
   const [theme, setTheme] = useState('');
   const [style, setStyle] = useState('');
-  const [referencePatterns, setReferencePatterns] = useState(null);
 
-  // Init progress
+  // 步骤 1: 选题调研
+  const [researchLoading, setResearchLoading] = useState(false);
+  const [researchResult, setResearchResult] = useState<any>(null);
+  const [selectedRecommendation, setSelectedRecommendation] = useState<number | null>(null);
+
+  // 步骤 2: 创意激发
+  const [comboResult, setComboResult] = useState<Record<string, string> | null>(null);
+  const [comboLoading, setComboLoading] = useState(false);
+
+  // 步骤 3: 风格设定
+  const [styleParams, setStyleParams] = useState<Record<string, number> | null>(null);
+  const [customStylePrompt, setCustomStylePrompt] = useState('');
+
+  // 初始化
   const [running, setRunning] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [errors, setErrors] = useState('');
@@ -59,12 +110,12 @@ export default function InitWizardPage() {
     step: 'preparing', status: 'waiting', skipped_steps: [], details: {},
   });
 
-  const wizardSteps = (isCreating ? WIZARD_STEPS_NEW : WIZARD_STEPS_EXISTING).map((s, idx) => ({
+  const wizardSteps = WIZARD_STEPS.map((s, idx) => ({
     ...s,
     status: idx > step ? 'wait' : idx < step ? 'finish' : 'process',
   }));
 
-  // Load seed templates + existing project info
+  // 加载模板
   useEffect(() => {
     templateApi.seed().catch(() => {});
     if (!isCreating) {
@@ -75,6 +126,8 @@ export default function InitWizardPage() {
       ]).then(([proj, tmpl]) => {
         setProject(proj.data);
         setTemplates(Array.isArray(tmpl.data) ? tmpl.data : []);
+        setProjectId(existingId!);
+        setGenre(proj.data.genre || '');
       }).catch(() => {
         message.error('加载项目信息失败');
         navigate('/');
@@ -84,47 +137,104 @@ export default function InitWizardPage() {
     }
   }, [isCreating, existingId, navigate]);
 
-  const canNext = () => {
-    if (isCreating && step === 0) return !!genre && projectName.trim().length >= 2;
-    if (step === 0) return !!genre;
-    if (step === 1) return theme.trim().length >= 4;
-    return true;
-  };
-
-  const handleNext = () => {
-    if (step === 3) { startInit(); return; }
-    // If step 0 in create mode and project not yet created, create now
-    if (isCreating && step === 0 && canNext() && !projectId) {
-      createProject();
-      return;
-    }
-    setStep(step + 1);
-  };
-
-  const createProject = async () => {
+  // 步骤 0 → 1: 创建项目 + 直接去调研
+  const handleCreateProject = async () => {
+    if (!canNext()) return;
     setCreatingProject(true);
     try {
       const res = await projectApi.create({ name: projectName, genre, description: '' });
-      const pid = res.data.id;
-      setProjectId(pid);
+      setProjectId(res.data.id);
       setProject(res.data);
       message.success('项目已创建');
-      setStep(1);
-    } catch (e) {
+      setStep(1); // 直接进入选题调研
+    } catch {
       message.error('创建项目失败');
     } finally {
       setCreatingProject(false);
     }
   };
 
+  // 选题调研
+  const handleResearch = async () => {
+    if (!genre) return;
+    setResearchLoading(true);
+    setResearchResult(null);
+    try {
+      const resp = await fetch(`/api/v1/projects/topic/research?genre=${encodeURIComponent(genre)}&project_name=${encodeURIComponent(projectName)}`);
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(txt);
+      }
+      const data = await resp.json();
+      setResearchResult(data);
+    } catch (e: any) {
+      message.error('选题调研失败：' + (e.message || '未知错误'));
+    } finally {
+      setResearchLoading(false);
+    }
+  };
+
+  // 步骤 2: 创意组合生成
+  const handleGenerateCombo = () => {
+    setComboLoading(true);
+    setTimeout(() => {
+      const combo: Record<string, string> = {};
+      for (const dim of ['角色原型', '场景类型', '冲突类型', '主题方向', '结构框架']) {
+        combo[dim] = pick(SEED_POOLS[dim], 2).join('，');
+      }
+      setComboResult(combo);
+      setComboLoading(false);
+    }, 400);
+  };
+
+  // 步骤 3: 风格参数
+  const handleComputeStyle = () => {
+    if (!genre) return;
+    const params = GENRE_STYLE_PARAMS[genre] || {
+      vocabulary_density: 0.55, rhythm: 0.6, sentence_style: 0.55,
+      rhetoric_level: 0.55, emotional_temperature: 0.55, dialogue_ratio: 0.55,
+    };
+    setStyleParams(params);
+    const prompt = [
+      `【写作风格注入 — ${genre}】`,
+      `词汇密度 ${Math.round(params.vocabulary_density * 10)}/10`,
+      `叙事节奏 ${Math.round(params.rhythm * 10)}/10`,
+      `句式复杂度 ${Math.round(params.sentence_style * 10)}/10`,
+      `修辞密度 ${Math.round(params.rhetoric_level * 10)}/10`,
+      `情感温度 ${Math.round(params.emotional_temperature * 10)}/10`,
+      `对话占比 ${Math.round(params.dialogue_ratio * 100)}%`,
+    ].join('\n');
+    setCustomStylePrompt(prompt);
+  };
+
+  // 步骤 4: 初始化
   const startInit = async () => {
     const pid = projectId;
-    if (!pid) return;
+    if (!pid) {
+      const res = await projectApi.create({ name: projectName, genre, description: '' });
+      pid = res.data.id;
+      setProjectId(pid);
+      setProject(res.data);
+    }
     setRunning(true);
     setErrors('');
     setProgress({ step: 'preparing', status: 'running', skipped_steps: [], details: {} });
 
-    const params = { genre, theme, style, reference_patterns: referencePatterns };
+    // 拼接创意思维和风格 prompt 到主题/style
+    const comboText = comboResult
+      ? Object.entries(comboResult).map(([k, v]) => `${k}: ${v}`).join('; ')
+      : '';
+    const finalTheme = `${theme || genre + '题材'}，${comboText || ''}`;
+    const finalStyle = customStylePrompt || style || '';
+
+    const params = {
+      genre,
+      theme: selectedRecommendation !== null && researchResult
+        ? `${researchResult.recommendations[selectedRecommendation]?.angle || ''} - ${finalTheme}`
+        : finalTheme,
+      style: finalStyle,
+    };
+
     const response = await fetch(`/api/v1/projects/${pid}/init`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -135,7 +245,6 @@ export default function InitWizardPage() {
       const text = await response.text().catch(() => '');
       setRunning(false);
       setErrors(`初始化失败：${text}`);
-      message.error('初始化失败');
       return;
     }
 
@@ -148,7 +257,6 @@ export default function InitWizardPage() {
 
     const decoder = new TextDecoder();
     let buffer = '';
-    const controller = new AbortController();
 
     try {
       while (true) {
@@ -170,39 +278,49 @@ export default function InitWizardPage() {
               } else if (msg.type === 'error') {
                 setErrors(msg.error);
               }
-            } catch { /* ignore */ }
+            } catch {}
           }
         }
       }
-      setStep(4);
+      setStep(5);
       setRunning(false);
       message.success('项目初始化完成！');
-    } catch (e) {
+    } catch (e: any) {
       setErrors(`初始化中断：${e?.message || '未知错误'}`);
       setRunning(false);
-      message.error('初始化中断');
     } finally {
       await reader.cancel();
-      controller.abort();
     }
   };
 
+  const handleNext = () => {
+    if (step === 4) { startInit(); return; }
+    setStep(step + 1);
+  };
+
   const handleFinish = () => {
-    const targetId = projectId || existingId;
-    navigate(`/projects/${targetId}/workshop`);
+    navigate(`/projects/${projectId}/workshop`);
   };
 
   const genreOptions = templates.length
-    ? templates.map((t) => ({ label: `${t.name} (${t.category})`, value: t.name }))
-    : DEFAULT_GENRES.map((g) => ({ label: g, value: g }));
+    ? templates.map(t => ({ label: `${t.name} (${t.category})`, value: t.name }))
+    : DEFAULT_GENRES.map(g => ({ label: g, value: g }));
 
-  const onGenreChange = (v) => {
+  const handleGenreChange = (v: string) => {
     setGenre(v);
     if (v) {
       templateApi.search(v).then(r => setGenreTemplate(r.data)).catch(() => setGenreTemplate(null));
     } else {
       setGenreTemplate(null);
     }
+  };
+
+  const canNext = (): boolean => {
+    if (step === 0) return !!genre && projectName.trim().length >= 2;
+    if (step === 1) return !!researchResult;
+    if (step === 2) return !!comboResult;
+    if (step === 3) return !!styleParams;
+    return true;
   };
 
   if (loading) {
@@ -217,211 +335,269 @@ export default function InitWizardPage() {
 
   return (
     <AppLayout projectId={projectId || undefined}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         <Title level={3} style={{ marginBottom: 8 }}>
           {isCreating ? '新建项目' : `初始化：${project?.name || '未知项目'}`}
         </Title>
         <Paragraph type="secondary">
-          {isCreating
-            ? '填写项目信息、选择题材与风格，AI 将自动生成故事核心、世界观、角色和大纲。'
-            : '按引导完成题材、主题和风格设置，AI 将自动为您生成故事核心、世界观、角色和大纲。'}
+          从题材调研到风格设定，逐步搭建你的小说蓝图。
         </Paragraph>
 
-        <Steps current={step} items={wizardSteps} style={{ marginBottom: 32 }} size="small" />
+        <Steps current={step} items={wizardSteps} style={{ marginBottom: 24 }} size="small" />
 
         <Card>
-          {/* Step 0: Project name + genre (new project) or genre only (existing) */}
+          {/* ====================== 步骤 0: 项目信息 ====================== */}
           {step === 0 && (
-            <Space direction="vertical" size={16}>
-              <Title level={5}>{isCreating ? '项目信息' : '选择题材'}</Title>
-              {isCreating && (
-                <div>
-                  <Text>项目名称</Text>
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Title level={5}>项目信息</Title>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Text strong>项目名称</Text>
                   <Input
                     placeholder="例如：《元戒》《星河纪》"
                     value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    style={{ width: 360 }}
+                    onChange={e => setProjectName(e.target.value)}
                     allowClear
                   />
-                </div>
-              )}
-              <div>
-                <Text>题材</Text>
-                <Select
-                  style={{ width: 300 }}
-                  placeholder="请选择题材"
-                  value={genre}
-                  onChange={onGenreChange}
-                  options={genreOptions}
-                  showSearch
-                  optionFilterProp="label"
-                  allowClear
-                />
-              </div>
+                </Col>
+                <Col span={12}>
+                  <Text strong>题材</Text>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="请选择题材"
+                    value={genre}
+                    onChange={handleGenreChange}
+                    options={genreOptions}
+                    showSearch
+                    optionFilterProp="label"
+                    allowClear
+                  />
+                </Col>
+              </Row>
               {genreTemplate && (
-                <Card size="small" style={{ marginTop: 8 }}>
-                  <Space direction="vertical" size={8}>
+                <Card size="small">
+                  <Space direction="vertical" size={4}>
                     <Text><Text strong>类别：</Text>{genreTemplate.category}</Text>
-                    {genreTemplate.config && (
-                      <>
-                        {genreTemplate.config.pacing && (
-                          <Text><Text strong>节奏：</Text>每章约 {genreTemplate.config.pacing.typical_chapter_word_count} 字，{genreTemplate.config.pacing.coolpoint_interval_chapters} 章一爽点</Text>
-                        )}
-                        {genreTemplate.config.style && (
-                          <Text><Text strong>风格：</Text>{genreTemplate.config.style.vocabulary}，对话占比 {Math.round(genreTemplate.config.style.dialogue_ratio * 100)}%</Text>
-                        )}
-                        {genreTemplate.config.tropes && genreTemplate.config.tropes.length > 0 && (
-                          <Text><Text strong>经典套路：</Text>{genreTemplate.config.tropes.join('、')}</Text>
-                        )}
-                      </>
+                    {genreTemplate.config?.pacing && (
+                      <Text><Text strong>节奏：</Text>每章约 {genreTemplate.config.pacing.typical_chapter_word_count} 字</Text>
                     )}
                   </Space>
                 </Card>
               )}
-              <Text type="secondary">{isCreating ? '项目名和题材决定故事的基底。' : '题材决定了故事的世界基底和叙事基调。'}</Text>
             </Space>
           )}
 
-          {/* Step 1: Theme + style */}
+          {/* ====================== STEP 1：选题调研 ====================== */}
           {step === 1 && (
-            <Space direction="vertical" size={16}>
-              <Title level={5}>主题与风格</Title>
-              <div>
-                <Text>主题倾向</Text>
-                <TextArea
-                  rows={3}
-                  placeholder="例如：探讨孤独与救赎、热血逆袭、权谋争霸、轻松日常……"
-                  value={theme}
-                  onChange={(e) => setTheme(e.target.value)}
-                  maxLength={500}
-                  showCount
-                />
-              </div>
-              <div>
-                <Text>写作风格</Text>
-                <TextArea
-                  rows={2}
-                  placeholder="例如：文风轻松诙谐、节奏紧凑、悬疑感强、诗意抒情……（可选）"
-                  value={style}
-                  onChange={(e) => setStyle(e.target.value)}
-                  maxLength={300}
-                  showCount
-                />
-              </div>
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Title level={5}>AI 选题调研</Title>
+              <Text type="secondary">
+                基于当前网文市场趋势，AI 分析「{genre}」题材的竞争环境、读者偏好，并推荐 3 个差异化切入点方案。
+              </Text>
+              {!researchResult ? (
+                <div style={{ textAlign: 'center', padding: 30 }}>
+                  <Button
+                    type="primary"
+                    size="large"
+                    icon={<SearchOutlined />}
+                    loading={researchLoading}
+                    onClick={handleResearch}
+                  >
+                    开始调研
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <Card size="small" title="市场概况" style={{ marginBottom: 12, background: '#fafafa' }}>
+                    <Paragraph style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>
+                      {researchResult.market_summary}
+                    </Paragraph>
+                  </Card>
+                  {researchResult.hot_trends?.length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <Text strong style={{ fontSize: 12 }}>热点趋势：</Text>
+                      <div style={{ marginTop: 4 }}>
+                        {researchResult.hot_trends.map((t: string, i: number) => (
+                          <Tag key={i} color="blue" style={{ margin: 2, padding: '4px 8px', fontSize: 12 }}>
+                            {t}
+                          </Tag>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <Divider style={{ margin: '12px 0' }} />
+                  <Text strong>推荐切入点（请选择一个）</Text>
+                  <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+                    {researchResult.recommendations?.map((rec: any, i: number) => (
+                      <Col xs={24} key={i}>
+                        <Card
+                          hoverable
+                          size="small"
+                          style={{
+                            borderLeft: selectedRecommendation === i ? '4px solid #5B9BD5' : '4px solid #e8e8e8',
+                            background: selectedRecommendation === i ? '#f0f5ff' : 'white',
+                          }}
+                          onClick={() => setSelectedRecommendation(i)}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <Text strong style={{ fontSize: 14 }}>{rec.angle}</Text>
+                            </div>
+                            <Tag color={selectedRecommendation === i ? 'blue' : 'default'}>
+                              {rec.score != null ? `匹配度 ${(rec.score * 100).toFixed(0)}%` : '—'}
+                            </Tag>
+                          </div>
+                          <Typography.Paragraph
+                            type="secondary"
+                            style={{ fontSize: 13, marginTop: 8, marginBottom: 4 }}
+                          >
+                            {rec.description}
+                          </Typography.Paragraph>
+                          <Text type="secondary" italic style={{ fontSize: 12}}>
+                            📌 {rec.entry_point}
+                          </Text>
+                        </Card>
+                      </Col>
+                    ))}
+                  </Row>
+                </div>
+              )}
             </Space>
           )}
 
-          {/* Step 2: Reference deconstruction */}
+          {/* ====================== 步骤 2：创意激发 ====================== */}
           {step === 2 && (
-            <Space direction="vertical" size={16}>
-              <Title level={5}>参考书拆解（可选）</Title>
-              <Alert
-                message="如有参考书拆解结果，请在此粘贴；AI 将吸收其中的结构/节奏/设定手法。"
-                type="info"
-              />
-              <div>
-                <Text>参考书拆解 JSON（可选）</Text>
-                <TextArea
-                  rows={4}
-                  placeholder='粘贴 deconstruction 模块的拆解 JSON'
-                  value={referencePatterns ? JSON.stringify(referencePatterns, null, 2) : ''}
-                  onChange={(e) => {
-                    try { setReferencePatterns(JSON.parse(e.target.value || '{}')); }
-                    catch { setReferencePatterns(e.target.value || null); }
-                  }}
-                />
-              </div>
-              <Text type="secondary">此步骤完全可选，跳过不会影响初始化。</Text>
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Title level={5}>创意激发 + 主题填充</Title>
+              {!comboResult ? (
+                <div style={{ textAlign: 'center', padding: 30 }}>
+                  <Button
+                    type="primary"
+                    icon={<BulbOutlined />}
+                    loading={comboLoading}
+                    onClick={handleGenerateCombo}
+                  >
+                    生成创意组合
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Row gutter={8}>
+                    {Object.entries(comboResult).map(([dim, val]) => (
+                      <Col xs={24} sm={12} key={dim}>
+                        <Card size="small" bordered style={{ borderLeft: `4px solid ${({ '角色原型': '#906dd6', '场景类型': '#1890ff' })[dim] || '#ccc'}` }}>
+                          <Text type="secondary" style={{ fontSize: 11 }}>{dim}</Text>
+                          <div><Text strong>{val}</Text></div>
+                        </Card>
+                      </Col>
+                    ))}
+                  </Row>
+                  <div>
+                    <Text strong>主题倾向（可修改）</Text>
+                    <TextArea
+                      rows={3}
+                      placeholder="例如：孤独与救赎 / 热血逆袭 / 权谋争霸……"
+                      value={theme}
+                      onChange={e => setTheme(e.target.value)}
+                      maxLength={500}
+                    />
+                    <Text type="secondary" style={{ fontSize: 11 }}>
+                      填入你的故事想表达的核心主题，AI 将围绕这个主题生成故事核心。
+                    </Text>
+                  </div>
+                </>
+              )}
             </Space>
           )}
 
-          {/* Step 3: Start init */}
+          {/* ====================== 步骤 3：风格设定 ====================== */}
           {step === 3 && (
-            <Space direction="vertical" size={20} style={{ width: '100%' }}>
-              <Title level={5}>确认并开始初始化</Title>
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Title level={5}>风格参数 + 写作指导</Title>
+              {!styleParams ? (
+                <Button type="primary" onClick={handleComputeStyle}>{`为《genre》生成风格参数`}</Button>
+              ) : (
+                <div>
+                  <Card size="small" title="风格写作注入 Prompt" style={{ background: '#fffbe6', marginBottom: 12 }}>
+                    <Typography.Paragraph
+                      style={{ whiteSpace: 'pre-wrap', fontSize: 13, fontFamily: 'monospace', margin: 0 }}
+                    >
+                      {customStylePrompt}
+                    </Typography.Paragraph>
+                  </Card>
+                  <Text type="secondary">
+                    此风格设定会与上面的选词和主题一起被注入项目初始化，且可后续在「写作模块」手动修改。
+                  </Text>
+                </div>
+              )}
+            </Space>
+          )}
+
+          {/* ====================== 步骤 4：确认 + 初始化 ====================== */}
+          {step === 4 && (
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Title level={5}>确认所有设置，开始初始化</Title>
               <Card size="small">
-                <Space direction="vertical" size={8}>
-                  {isCreating && <Text><Text strong>项目名称：</Text>{projectName || '未填写'}</Text>}
-                  <Text><Text strong>题材：</Text>{genre || '未选择'}</Text>
+                <Space direction="vertical" size={4}>
+                  <Text><Text strong>项目名称：</Text>{projectName}</Text>
+                  <Text><Text strong>题材：</Text>{genre}</Text>
+                  {researchResult && selectedRecommendation !== null && (
+                    <Text><Text strong>切入点：</Text>{researchResult.recommendations[selectedRecommendation]?.angle}</Text>
+                  )}
                   <Text><Text strong>主题：</Text>{theme || '未填写'}</Text>
-                  <Text><Text strong>风格：</Text>{style || '未填写'}</Text>
-                  <Text><Text strong>参考拆解：</Text>{referencePatterns ? '已提供' : '无'}</Text>
+                  <Text><Text strong>风格 Prompt：</Text>{customStylePrompt ? '已设定' : '未设定'}</Text>
                 </Space>
               </Card>
-              <Divider />
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text>初始化进度</Text>
-                  <Text type="secondary">{running ? '执行中...' : '待开始'}</Text>
-                </div>
-                <Progress
-                  percent={progress.status === 'completed' ? 100 : progress.status === 'running' ? 50 : 0}
-                  status={progress.status === 'running' ? 'active' : 'normal'}
-                  style={{ flex: 1 }}
-                />
-                {progress.step && progress.step !== 'preparing' && (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {['story_core', 'worldview', 'characters', 'outline'].map((s) => {
-                      const st = progress.details?.[s]?.type || (progress.step === s ? 'running' : 'waiting');
-                      const statusMap = { generated: 'completed', skipped: 'skipped', running: 'running', waiting: 'waiting' };
-                      return <span key={s}>{s}: {statusMap[st] || st}</span>;
-                    })}
-                  </div>
-                )}
-                {errors && (
-                  <Alert message="错误" description={errors} type="error" showIcon />
-                )}
-              </Space>
+              <Progress
+                percent={progress.status === 'completed' ? 100 : progress.status === 'running' ? 50 : 0}
+                active={progress.status === 'running' ? 'active' : 'normal'}
+                format={<Text type="secondary">{progress.step}</Text>
+              />
+              {errors && <Alert message="错误" error={errors} type="error" showIcon />}
             </Space>
           )}
 
-          {/* Step 4: Done */}
-          {step === 4 && (
-            <Space direction="vertical" size={16} style={{ textAlign: 'center', padding: 20 }}>
+          {/* ====================== 步骤 5：完成 ====================== */}
+          {step === 5 && (
+            <div style={{ textAlign: 'center', padding: 24 }}>
               <CheckCircleOutlined style={{ fontSize: 64, color: '#52c41a' }} />
-              <Title level={4}>初始化完成！</Title>
-              <Paragraph type="secondary">
-                故事核心、世界观、角色和大纲已生成。
-                {progress.skipped_steps?.length > 0 && (
-                  <> 已跳过步骤：{progress.skipped_steps.join('、')}</>
-                )}
+              <Title level={4} style={{ marginTop: 12 }}>初始化完成！</Title>
+              <Paragraph>
+                故事核心、世界观、人物和大纲已生成。
+                {progress.skipped_steps?.length > 0
+                  && <Text type="secondary">其余步骤已跳过。</Text>
               </Paragraph>
-              <Button type="primary" size="large" icon={<RocketOutlined />} onClick={handleFinish}>
-                前往项目工坊
-              </Button>
-            </Space>
+            </div>
           )}
 
+          {/* ====================== 底部导航 ====================== */}
           <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
             <Button
-              onClick={() => { if (step === 3 && running) return; setStep(step - 1); }}
-              disabled={step === 0 || (step === 3 && running)}
+              onClick={() => setStep(step - 1)}
+              disabled={step === 0 || (step === 4 && running)}
             >
               上一步
             </Button>
             <Space>
-              {step === 3 && (
+              {step === 4 && (
                 <Button
                   type="primary"
                   size="large"
                   icon={<ThunderboltOutlined />}
                   loading={running}
                   onClick={startInit}
-                  disabled={running}
-                >
-                  {running ? '初始化中...' : '开始初始化'}
-                </Button>
+                  disabled={!!errors}
+                />
               )}
-              {step !== 3 && step !== 4 && (
+              {step !== 4 && step !== 5 && (
                 <Button
                   type="primary"
-                  icon={isCreating && step === 0 ? <PlayCircleOutlined /> : undefined}
-                  loading={isCreating && step === 0 ? creatingProject : false}
-                  onClick={handleNext}
-                  disabled={!canNext() || (isCreating && step === 0 && creatingProject)}
+                  icon={step === 0 ? <PlayCircleOutlined /> : undefined}
+                  loading={step === 0 ? creatingProject : false}
+                  onClick={step === 0 ? handleCreateProject : handleNext}
+                  disabled={!canNext()}
                 >
-                  {isCreating && step === 0 ? '创建并继续' : step === 2 ? '下一步：开始初始化' : '下一步'}
+                  {step === 0 ? '创建并继续' : step === 3 ? '开始初始化' : '下一步'}
                 </Button>
               )}
             </Space>
