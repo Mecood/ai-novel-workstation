@@ -54,6 +54,14 @@ export interface GraphNodeData {
   nodeSize?: number;
 }
 
+export interface SourceRef {
+  chapter_id: string;
+  chapter_number: number;
+  line_range: [number, number];
+  text: string;
+  added_at: string;
+}
+
 export interface GraphEdgeData {
   source: string;
   target: string;
@@ -61,6 +69,7 @@ export interface GraphEdgeData {
   sourceName: string;
   targetName: string;
   description?: string;
+  sourceRefs?: SourceRef[];
 }
 
 interface G6CharacterGraphProps {
@@ -68,6 +77,7 @@ interface G6CharacterGraphProps {
   edges: GraphEdgeData[];
   loading?: boolean;
   onNodeClick?: (nodeId: string) => void;
+  onEdgeClick?: (edgeIdx: number) => void;
   height?: number;
 }
 
@@ -76,6 +86,7 @@ export default function G6CharacterGraph({
   edges,
   loading = false,
   onNodeClick,
+  onEdgeClick,
   height = 500,
 }: G6CharacterGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -121,6 +132,8 @@ export default function G6CharacterGraph({
         sourceName: e.sourceName,
         targetName: e.targetName,
         description: e.description,
+        sourceRefs: e.sourceRefs,
+        edgeIndex: i,
       },
       style: {
         stroke: relColor(e.label),
@@ -193,6 +206,14 @@ export default function G6CharacterGraph({
       }
     });
 
+    // 边点击事件
+    graph.on('edge:click', (evt: any) => {
+      const edgeData = evt?.target?.data;
+      if (edgeData && onEdgeClick) {
+        onEdgeClick(edgeData.edgeIndex);
+      }
+    });
+
     graphRef.current = graph;
 
     // Async render to ensure proper sizing
@@ -201,7 +222,7 @@ export default function G6CharacterGraph({
         graph.render();
       } catch {}
     });
-  }, [nodes, edges, height, onNodeClick]);
+  }, [nodes, edges, height, onNodeClick, onEdgeClick]);
 
   // 监听 resize
   useEffect(() => {

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -29,6 +30,10 @@ async def create_foreshadowing(
         description=data.description,
         target_chapter=data.target_chapter,
         status=data.status,
+        evidence_line=data.evidence_line,
+        evidence_chapter=data.evidence_chapter,
+        evidence_text=data.evidence_text,
+        reminder_level=data.reminder_level,
     )
     db.add(foreshadowing)
     await db.commit()
@@ -81,6 +86,36 @@ async def update_foreshadowing(
     return ForeshadowingResponse.model_validate(foreshadowing)
 
 
+# ── 伏笔回收 resolve ───────────────────────────────────────────────
+@router.post("/{foreshadowing_id}/resolve", response_model=ForeshadowingResponse)
+async def resolve_foreshadowing(
+    project_id: UUID,
+    foreshadowing_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """将伏笔标记为已回收（resolved），自动设置 resolved_at"""
+    result = await db.execute(
+        select(Foreshadowing).where(
+            Foreshadowing.id == foreshadowing_id,
+            Foreshadowing.project_id == project_id,
+        )
+    )
+    foreshadowing = result.scalar_one_or_none()
+    if not foreshadowing:
+        raise HTTPException(status_code=404, detail="Foreshadowing not found")
+
+    if foreshadowing.status == "resolved":
+        raise HTTPException(status_code=409, detail="Foreshadowing already resolved")
+
+    foreshadowing.status = "resolved"
+    foreshadowing.resolved_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(foreshadowing)
+    return ForeshadowingResponse.model_validate(foreshadowing)
+
+
+# ── 未回收 / 逾期 ──────────────────────────────────────────────────
 @router.get("/unresolved")
 async def list_unresolved_foreshadowings(
     project_id: UUID,
@@ -123,6 +158,10 @@ async def list_unresolved_foreshadowings(
             "target_chapter": f.target_chapter,
             "status": f.status,
             "is_overdue": is_overdue,
+            "evidence_line": f.evidence_line,
+            "evidence_chapter": f.evidence_chapter,
+            "evidence_text": f.evidence_text,
+            "reminder_level": f.reminder_level,
         })
 
     return {

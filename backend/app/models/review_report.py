@@ -29,6 +29,10 @@ class ReviewReport(Base):
     user_decision = Column(String(32), nullable=True)
     user_note = Column(Text, nullable=True)
 
+    # ── 多任务分析编排器：任务类型标记 ─────────────────────────────
+    task_type = Column(String(24), nullable=True, default=None)
+    # 可选值: structure_analysis, character_extract, timeline_extract, consistency_check
+
     __table_args__ = (
-        UniqueConstraint("project_id", "chapter_number", name="uq_review_project_chapter"),
+        UniqueConstraint("project_id", "chapter_number", "task_type", name="uq_review_project_chapter_task"),
     )

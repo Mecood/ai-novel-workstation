@@ -34,6 +34,7 @@ async def create_chapter(
         outline_detail=data.outline_detail,
         word_count=data.word_count,
         status=data.status,
+        content_marks=data.content_marks,
     )
     db.add(chapter)
     await db.commit()

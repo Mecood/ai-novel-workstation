@@ -22,6 +22,7 @@ import StylePage from './pages/project/StylePage';
 import ContextAgentView from './pages/project/ContextAgentView';
 import DeconstructionPage from './pages/project/DeconstructionPage';
 import InitWizardPage from './pages/project/InitWizardPage';
+import AnalysisPage from './pages/project/AnalysisPage';
 import RelationshipPage from './pages/project/RelationshipPage';
 import ProjectSettingsPage from './pages/project/ProjectSettingsPage';
 import SkillsPage from './pages/project/SkillsPage';
@@ -77,6 +78,7 @@ function App() {
           <Route path="/projects/:id/deconstruction" element={<DeconstructionPage />} />
           <Route path="/projects/:id/relationships" element={<RelationshipPage />} />
           <Route path="/projects/:id/skills" element={<SkillsPage />} />
+          <Route path="/projects/:id/analysis" element={<AnalysisPage />} />
           <Route path="/projects/new" element={<InitWizardPage />} />
           <Route path="/projects/:id/init-wizard" element={<InitWizardPage />} />
           <Route path="/settings" element={<SettingsPage />} />

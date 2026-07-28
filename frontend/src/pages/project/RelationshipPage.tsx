@@ -1,13 +1,13 @@
 // @ts-nocheck
 import { useParams } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Card, Spin, Button, Typography, Tag, Tooltip, Space, Row, Col, Empty, InputNumber, message, Tabs } from 'antd';
-import { UsergroupAddOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { Card, Spin, Button, Typography, Tag, Tooltip, Space, Row, Col, Empty, InputNumber, message, Tabs, Modal, List, Divider } from 'antd';
+import { UsergroupAddOutlined, ReloadOutlined, ThunderboltOutlined, LinkOutlined } from '@ant-design/icons';
 import ReactEChartsCore from 'echarts-for-react';
 import AppLayout from '../../components/layout/AppLayout';
 import { eventApi, characterApi, type Character } from '../../services/api';
 import G6CharacterGraph from '../../components/charts/G6CharacterGraph';
-import type { GraphNodeData, GraphEdgeData } from '../../components/charts/G6CharacterGraph';
+import type { GraphNodeData, GraphEdgeData, SourceRef } from '../../components/charts/G6CharacterGraph';
 
 const { Title, Text } = Typography;
 
@@ -100,6 +100,7 @@ function buildCharacterGraphData(characters: Character[]): {
         targetName: targetName,
         label: getShortRelLabel(rel.relation),
         description: rel.relation || '',
+        sourceRefs: rel.source_refs || [],
       });
     }
   }
@@ -128,6 +129,30 @@ export default function RelationshipPage() {
   const [extractChapter, setExtractChapter] = useState(1);
   const [activeTab, setActiveTab] = useState<'graph' | 'events'>('graph');
   const chartRef = useRef<any>(null);
+
+  // ── G6 节点/边点击 Modal 状态 ──
+  const [nodeModal, setNodeModal] = useState<{ open: boolean; nodeId: string }>({ open: false, nodeId: '' });
+  const [edgeModal, setEdgeModal] = useState<{ open: boolean; edgeIdx: number }>({ open: false, edgeIdx: -1 });
+
+  // 当前选中节点的角色信息
+  const nodeCharacter = useMemo(
+    () => (nodeModal.nodeId ? characters.find((c) => c.id === nodeModal.nodeId) : null),
+    [nodeModal.nodeId, characters],
+  );
+
+  // 与当前选中节点相关的边
+  const nodeEdges = useMemo(() => {
+    if (!nodeModal.nodeId) return [];
+    return characterGraphData.edges.filter(
+      (e) => e.source === nodeModal.nodeId || e.target === nodeModal.nodeId,
+    );
+  }, [nodeModal.nodeId, characterGraphData.edges]);
+
+  // 当前选中的边
+  const currentEdge = useMemo(
+    () => (edgeModal.edgeIdx >= 0 ? characterGraphData.edges[edgeModal.edgeIdx] : null),
+    [edgeModal.edgeIdx, characterGraphData.edges],
+  );
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -290,8 +315,10 @@ export default function RelationshipPage() {
             loading={charLoading}
             height={520}
             onNodeClick={(nodeId) => {
-              // 可以在这里跳转到角色详情
-              console.log('Clicked node:', nodeId, characters.find(c => c.id === nodeId)?.name);
+              setNodeModal({ open: true, nodeId });
+            }}
+            onEdgeClick={(edgeIdx) => {
+              setEdgeModal({ open: true, edgeIdx });
             }}
           />
         </Card>

@@ -155,6 +155,14 @@ export interface Chapter {
   outline_detail?: ChapterOutlineDetail | null;
   word_count: number;
   status: string;
+  content_marks?: Array<{
+    id: string;
+    type: string;
+    line_start: number;
+    line_end: number;
+    text: string;
+    created_at: string;
+  }> | null;
   created_at: string;
 }
 
@@ -166,6 +174,14 @@ export interface ChapterCreate {
   outline_detail?: ChapterOutlineDetail | null;
   word_count?: number;
   status?: string;
+  content_marks?: Array<{
+    id: string;
+    type: string;
+    line_start: number;
+    line_end: number;
+    text: string;
+    created_at: string;
+  }> | null;
 }
 
 export const chapterApi = {
@@ -300,15 +316,47 @@ export interface Foreshadowing {
   project_id: string;
   title: string;
   description: string;
-  target_chapter: number;
-  status: string;
+  target_chapter: number | null;
+  status: string; // planted | active | resolved | abandoned
+  // 证据链
+  evidence_line: string | null;
+  evidence_chapter: number | null;
+  evidence_text: string | null;
+  // 提醒等级
+  reminder_level: string; // low | medium | high | urgent
+  // 回收时间
+  resolved_at: string | null;
+  // DAG
+  depends_on: string[] | null;
+  dependency_type: string | null;
+  expected_redemption_chapter: number | null;
+  auto_check_enabled: boolean;
+  payoff_chapter: number | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface ForeshadowingCreate {
   title: string;
   description: string;
-  target_chapter: number;
+  target_chapter?: number | null;
+  status?: string;
+  evidence_line?: string | null;
+  evidence_chapter?: number | null;
+  evidence_text?: string | null;
+  reminder_level?: string;
+}
+
+export interface ForeshadowingUpdate {
+  title?: string;
+  description?: string;
+  target_chapter?: number | null;
+  status?: string;
+  evidence_line?: string | null;
+  evidence_chapter?: number | null;
+  evidence_text?: string | null;
+  reminder_level?: string;
+  resolved_at?: string | null;
 }
 
 export const foreshadowingApi = {
@@ -316,11 +364,39 @@ export const foreshadowingApi = {
     api.get<Foreshadowing[]>(`/projects/${projectId}/foreshadowings`),
   create: (projectId: string, data: ForeshadowingCreate) =>
     api.post<Foreshadowing>(`/projects/${projectId}/foreshadowings`, data),
-  updateStatus: (projectId: string, id: string, status: string) =>
-    api.put(`/projects/${projectId}/foreshadowings/${id}`, { status }),
+  update: (projectId: string, id: string, data: ForeshadowingUpdate) =>
+    api.put<Foreshadowing>(`/projects/${projectId}/foreshadowings/${id}`, data),
+  resolve: (projectId: string, id: string) =>
+    api.post<Foreshadowing>(`/projects/${projectId}/foreshadowings/${id}/resolve`),
   getUnresolved: (projectId: string) =>
     api.get<{ count: number; overdue: number; items: (Foreshadowing & { is_overdue: boolean })[] }>(
       `/projects/${projectId}/foreshadowings/unresolved`
+    ),
+};
+
+// === Analysis (批量AI分析) ===
+export interface AnalysisReport {
+  task_type: string;
+  chapter_number: number;
+  chapter_title: string;
+  status: 'running' | 'complete' | 'error';
+  overall_score?: number;
+  issues?: Array<{ description: string; severity: string }>;
+  dimension_scores?: Record<string, number>;
+  summary?: string;
+  error?: string;
+  created_at?: string;
+}
+
+export const analysisApi = {
+  run: (projectId: string, body: { task_types: string[]; chapter_range?: [number, number] }) =>
+    api.post<{ status_map: Record<string, number>; total: number; reports: AnalysisReport[] }>(
+      `/projects/${projectId}/analysis/run`, body
+    ),
+  history: (projectId: string, task_type?: string) =>
+    api.get<{ count: number; items: AnalysisReport[] }>(
+      `/projects/${projectId}/analysis/history`,
+      task_type ? { params: { task_type } } : undefined
     ),
 };
 

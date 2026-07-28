@@ -46,7 +46,7 @@ async def get_template(
 async def run_seed(db: AsyncSession = Depends(get_db)):
     """执行题材模板种子注入（幂等，重复调用不报错）。"""
     from app.models.genre_template import GenreTemplate
-    inserted = seed_templates(db)
+    inserted = await seed_templates(db)
     return {"inserted": inserted, "message": f"已注入 {inserted} 个新模板"}
 
 
