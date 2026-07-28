@@ -5,7 +5,7 @@ import {
   Spin, List, Tag, Alert, Result,
 } from 'antd';
 import AppLayout from '../../components/layout/AppLayout';
-import { projectApi } from '../../services/api';
+import { projectApi, backupApi } from '../../services/api';
 
 const { Title } = Typography;
 
@@ -69,6 +69,43 @@ export default function ProjectSettingsPage() {
       message.error('保存失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleExportBackup = async () => {
+    if (!id) return;
+    try {
+      const blob = await backupApi.download(id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'project-backup.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      message.success('备份导出成功');
+    } catch {
+      message.error('导出备份失败');
+    }
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!id || !file) return;
+    if (!file.name.endsWith('.json')) {
+      message.warning('请选择 .json 备份文件');
+      e.target.value = '';
+      return;
+    }
+    try {
+      const { restored_count } = await backupApi.restore(id, file);
+      message.success(`恢复完成，已写入 ${restored_count} 条记录，页面即将刷新`);
+      setTimeout(() => window.location.reload(), 800);
+    } catch {
+      message.error('导入备份失败，请检查文件是否为该项目备份');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -194,6 +231,43 @@ export default function ProjectSettingsPage() {
             )}
           />
         )}
+      </Card>
+      {/* ── 备份 ───────────────────────────────────────────────── */}
+      <Card
+        style={{ maxWidth: 600, marginTop: 16 }}
+        title="备份与恢复"
+        extra={
+          <span style={{ fontSize: 12, color: '#999' }}>
+            整项目数据：章节、角色、世界观、伏笔、知识等
+          </span>
+        }
+      >
+        <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+          <Button type="primary" onClick={handleExportBackup}>
+            导出备份
+          </Button>
+          <Button
+            onClick={() => {
+              const el = document.getElementById('backup-file-input');
+              el?.click();
+            }}
+          >
+            导入备份
+          </Button>
+        </div>
+        <input
+          id="backup-file-input"
+          type="file"
+          accept=".json,application/json"
+          style={{ display: 'none' }}
+          onChange={handleImportBackup}
+        />
+        <Alert
+          message="导出会生成 .json 文件包含全部项目数据；导入会清空该项目现有数据再写入，请谨慎操作"
+          type="warning"
+          showIcon
+          style={{ marginTop: 4 }}
+        />
       </Card>
     </AppLayout>
   );

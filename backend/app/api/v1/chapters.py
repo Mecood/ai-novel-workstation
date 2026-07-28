@@ -35,6 +35,8 @@ async def create_chapter(
         word_count=data.word_count,
         status=data.status,
         content_marks=data.content_marks,
+        group=data.group,
+        tags=data.tags,
     )
     db.add(chapter)
     await db.commit()
@@ -51,19 +53,27 @@ async def create_chapter(
 @router.get("", response_model=list[ChapterResponse])
 async def list_chapters(
     project_id: UUID,
+    group: str | None = Query(default=None),
+    tag: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     project_result = await db.execute(select(Project).where(Project.id == project_id))
     project = project_result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-
-    result = await db.execute(
-        select(Chapter)
-        .where(Chapter.project_id == project_id)
-        .order_by(Chapter.chapter_number.asc())
-    )
+    query = select(Chapter).where(Chapter.project_id == project_id)
+    if group is not None:
+        query = query.where(Chapter.group == group)
+    if tag is not None:
+        query = query.where(Chapter.tags.astext.contains(tag))
+    query = query.order_by(Chapter.chapter_number.asc())
+    result = await db.execute(query)
     chapters = result.scalars().all()
+    if group is not None:
+        chapters = [c for c in chapters if c.group == group]
+    if tag is not None:
+        def _tags(c): return c.tags or []
+        chapters = [c for c in chapters if tag in _tags(c)]
     return [ChapterResponse.model_validate(c) for c in chapters]
 
 

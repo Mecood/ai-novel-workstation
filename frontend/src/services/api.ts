@@ -155,6 +155,8 @@ export interface Chapter {
   outline_detail?: ChapterOutlineDetail | null;
   word_count: number;
   status: string;
+  group?: string | null;
+  tags?: string[] | null;
   content_marks?: Array<{
     id: string;
     type: string;
@@ -185,9 +187,11 @@ export interface ChapterCreate {
 }
 
 export const chapterApi = {
-  list: (projectId: string) =>
-    api.get<Chapter[]>(`/projects/${projectId}/chapters`),
+  list: (projectId: string, params?: { group?: string; tag?: string }) =>
+    api.get<Chapter[]>(`/projects/${projectId}/chapters`, { params }),
   update: (projectId: string, chapterId: string, data: Partial<ChapterCreate>) =>
+    api.put<Chapter>(`/projects/${projectId}/chapters/${chapterId}`, data),
+  updateGroupTags: (projectId: string, chapterId: string, data: { group?: string | null; tags?: string[] | null }) =>
     api.put<Chapter>(`/projects/${projectId}/chapters/${chapterId}`, data),
   delete: (projectId: string, chapterId: string) =>
     api.delete(`/projects/${projectId}/chapters/${chapterId}`),
@@ -802,3 +806,26 @@ export interface SkillDefinition {
 export interface ProjectSkill {
   id: string; project_id: string; skill_name: string; skill_category: string; enabled: boolean;
 }
+
+// ── Backup ───────────────────────────────────────────────────────────
+export interface BackupData { project: any; backup_time: string; backup_format_version: number; [key: string]: any; }
+export const backupApi = {
+  download: (projectId: string) =>
+    fetch(`${API_BASE}/projects/${projectId}/backup`, { method: "GET" }).then(async (resp) => {
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+      return resp.blob();
+    }),
+  restore: (projectId: string, file: File) => {
+    return file.text().then((jsonText) => {
+      const data: BackupData = JSON.parse(jsonText);
+      return fetch(`${API_BASE}/projects/${projectId}/backup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(async (resp) => {
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+        return resp.json() as Promise<{ restored_count: number }>;
+      });
+    });
+  },
+};

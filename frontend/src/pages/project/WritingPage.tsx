@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { useParams } from 'react-router-dom';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, InputNumber, Space, Popconfirm, Collapse, Alert, Modal } from 'antd';
-import { FileTextOutlined, SyncOutlined, EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined, BookOutlined, ExperimentOutlined, MedicineBoxOutlined, BarChartOutlined } from '@ant-design/icons';
+import { Card, Spin, message, Button, Typography, List, Tag, Empty, Input, InputNumber, Space, Popconfirm, Collapse, Alert, Modal, Select } from 'antd';
+import { FileTextOutlined, SyncOutlined, EditOutlined, ThunderboltOutlined, EyeOutlined, SendOutlined, DeleteOutlined, BookOutlined, ExperimentOutlined, MedicineBoxOutlined, BarChartOutlined, FolderOutlined, PlusOutlined } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
 import TiptapEditor from '../../components/editor/TiptapEditor';
 import { chapterApi, aiApi, foreshadowingApi, eventApi, debtApi, contractApi, DEBT_TYPE_LABELS, HOOK_TYPE_LABELS, HOOK_STRENGTH_LABELS, CONTRACT_STATUS_LABELS, COMMIT_STATUS_LABELS, EVENT_TYPE_LABELS, STAGE_LABELS, autoPipelineApi } from '../../services/api';
@@ -47,6 +47,10 @@ export default function WritingPage() {
   const [evalResult, setEvalResult] = useState<ReadingPowerEvalResult | null>(null);
   const [evaluating, setEvaluating] = useState(false);
   const [evalChapterNum, setEvalChapterNum] = useState<number>(1);
+  // ── 分组 / 标签 ────────────────────────────────────────────
+  const [groupFilter, setGroupFilter] = useState<string | undefined>();
+  const [tagFilter, setTagFilter] = useState<string | undefined>();
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   // ── 合同系统状态 ────────────────────────────────────────────────────
   const [contract, setContract] = useState<ChapterContract | null>(null);
@@ -124,6 +128,69 @@ export default function WritingPage() {
     });
   }, [id]);
   useEffect(() => { if (streamRef.current) streamRef.current.scrollTop = streamRef.current.scrollHeight; }, [streamContent]);
+
+  // ── 分组 / 标签 工具 ────────────────────────────────────────────
+  const groupedChapters = chapters.reduce((acc, ch) => {
+    const key = ch.group || '__ungrouped__';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(ch);
+    return acc;
+  }, {} as Record<string, Chapter[]>);
+  const groupKeys = Object.keys(groupedChapters).filter(k => k !== '__ungrouped__');
+  const allTags = [...new Set(chapters.flatMap(c => (c.tags || [])).filter(Boolean))].sort();
+  const groupedTags = [...new Set(groupKeys.map(g => ({ label: g })) )];
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleResetFilter = () => {
+    setGroupFilter(undefined);
+    setTagFilter(undefined);
+    setCollapsedGroups({});
+  };
+
+  const getFilteredChapters = (source: Chapter[]) => {
+    let out = source;
+    if (groupFilter) {
+      out = out.filter(c => c.group === groupFilter);
+    }
+    if (tagFilter) {
+      out = out.filter(c => (c.tags || []).includes(tagFilter));
+    }
+    return out;
+  };
+
+  const handleSetGroup = async (ch: Chapter, group: string | null) => {
+    if (!id) return;
+    try {
+      await chapterApi.updateGroupTags(id, ch.id, { group });
+      message.success('分组已更新');
+      fetchData();
+    } catch { message.error('更新失败'); }
+  };
+
+  const handleAddTag = async (ch: Chapter, tag: string) => {
+    if (!id || !tag.trim()) return;
+    tag = tag.trim();
+    const newTags = [...(ch.tags || []).filter(t => t !== tag), tag];
+    try {
+      await chapterApi.updateGroupTags(id, ch.id, { tags: newTags });
+      setTagInput('');
+      message.success(`已添加标签：${tag}`);
+      fetchData();
+    } catch { message.error('添加失败'); }
+  };
+
+  const handleRemoveTag = async (ch: Chapter, removeTag: string) => {
+    if (!id) return;
+    const newTags = (ch.tags || []).filter(t => t !== removeTag);
+    try {
+      await chapterApi.updateGroupTags(id, ch.id, { tags: newTags });
+      message.success('已移除标签');
+      fetchData();
+    } catch { message.error('移除失败'); }
+  };
 
   const handleGenerate = async () => {
     if (!id) return;
@@ -688,51 +755,96 @@ export default function WritingPage() {
 
       <div style={{ display: 'flex', gap: 16 }}>
         {/* 左侧章节列表 */}
-        <Card title="章节目录" style={{ width: 280, flexShrink: 0 }}>
-          {loading ? <Spin /> : chapters.length === 0 ? (
+        <Card
+          title={
+            <Space>
+              <Text strong>章节目录</Text>
+              <Tag color="cyan" style={{ cursor: 'pointer' }} onClick={handleResetFilter}>&lt;</Tag>
+            </Space>
+          }
+          style={{ width: 320, flexShrink: 0 }}
+          extra={
+            <Space>
+              <Text type="secondary">{chapters.length} 章</Text>
+            </Space>
+          }
+        >
+          {loading ? (
+            <Spin />
+          ) : chapters.length === 0 ? (
             <Empty description="暂无章节" />
           ) : (
-            <List
-              size="small"
-              dataSource={chapters}
-              renderItem={(ch) => (
-                <List.Item
-                  onClick={() => handleSelectChapter(ch)}
-                  style={{ cursor: 'pointer', background: selectedChapter?.id === ch.id ? '#e6f4ff' : undefined }}
-                  actions={[
-                    <Popconfirm
-                      key="delete"
-                      title={`确认删除第${ch.chapter_number}章？`}
-                      onConfirm={(e) => {
-                        e?.stopPropagation();
-                        handleDelete(ch);
-                      }}
-                      onCancel={(e) => e?.stopPropagation()}
-                      okText="确认"
-                      cancelText="取消"
+            <>
+              {/* 筛选栏：按分组 / 按标签 */}
+              <div style={{ padding: '4px 0 8px', borderBottom: '1px solid #f0f0f0', marginBottom: 8 }}>
+                <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 11 }}>按分组筛选</Text>
+                    <Select
+                      size="small"
+                      placeholder="选择分组"
+                      allowClear
+                      showSearch
+                      style={{ width: '100%', marginTop: 4 }}
+                      value={groupFilter}
+                      onChange={setGroupFilter}
+                      options={[{ label: '（未分组）', value: '' }, ...groupKeys.map(k => ({ label: k, value: k }))]}
+                    />
+                  </div>
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 11 }}>按标签筛选</Text>
+                    <Select
+                      size="small"
+                      placeholder="选择标签"
+                      allowClear
+                      style={{ width: '100%', marginTop: 4 }}
+                      value={tagFilter}
+                      onChange={setTagFilter}
+                      options={allTags.map(t => ({ label: t, value: t }))}
+                    />
+                  </div>
+                </Space>
+              </div>
+
+              {/* 章节树：无分组置顶，有分组的按组折叠 */}
+              <div>
+                {/* 未分组章节 */}
+                {groupedChapters['__ungrouped__']?.length && (
+                  <div>
+                    <div
+                      style={{ fontSize: 12, color: '#8c8c8c', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 4 }}
                     >
-                      <Button
-                        type="text"
-                        size="small"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </Popconfirm>,
-                  ]}
-                >
-                  <List.Item.Meta
-                    title={<Text strong>{ch.title?.startsWith('第') ? ch.title : `第${ch.chapter_number}章 ${ch.title}`}</Text>}
-                    description={
-                      <Space>
-                        <Tag>{ch.status}</Tag>
-                        <Text type="secondary">{ch.word_count}字</Text>
-                      </Space>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
+                      <Text type="secondary">📄 未分组</Text>
+                      <Text type="secondary" style={{ fontSize: 11 }}>{groupedChapters['__ungrouped__'].length}</Text>
+                    </div>
+                    {getFilteredChapters(groupedChapters['__ungrouped__']).map(ch => (
+                      <ChapterRow key={ch.id} ch={ch} />
+                    ))}
+                  </div>
+                )}
+                {/* 有分组的章节：可折叠 */}
+                {groupKeys.map(key => {
+                  const members = getFilteredChapters(groupedChapters[key]);
+                  const collapsed = collapsedGroups[key];
+                  return (
+                    <div key={key} style={{ marginTop: 6 }}>
+                      <div
+                        style={{ fontSize: 12, padding: '4px 0', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: '#1890ff', fontWeight: 600 }}
+                        onClick={() => toggleGroup(key)}
+                      >
+                        <Text>{collapsed ? '▶' : '▼'}</Text>
+                        <FolderOutlined />
+                        <Text strong>{key}</Text>
+                        <Text type="secondary" style={{ fontSize: 11 }}>{members.length}</Text>
+                      </div>
+                      {!collapsed && members.map(ch => (
+                        <ChapterRow key={ch.id} ch={ch} />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </Card>
 
@@ -1169,4 +1281,88 @@ export default function WritingPage() {
       />
     </AppLayout>
   );
+
+  // ── 章节行（嵌套组件，捕获父级闭包：选中态、删除、分组、标签） ────
+  function ChapterRow({ ch }: { ch: Chapter }) {
+    const [localGroup, setLocalGroup] = useState(ch.group || '');
+    const [localTag, setLocalTag] = useState('');
+    return (
+      <div
+        onClick={() => handleSelectChapter(ch)}
+        style={{
+          cursor: 'pointer',
+          padding: '6px 8px',
+          marginBottom: 2,
+          borderRadius: 4,
+          background: selectedChapter?.id === ch.id ? '#e6f4ff' : undefined,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Text strong style={{ fontSize: 13 }}>
+            {ch.title?.startsWith('第') ? ch.title : `第${ch.chapter_number}章 ${ch.title}`}
+          </Text>
+          <Popconfirm
+            title={`确认删除第${ch.chapter_number}章？`}
+            onConfirm={() => handleDelete(ch)}
+            okText="确认"
+            cancelText="取消"
+          >
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              style={{ padding: '0 4px' }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Popconfirm>
+        </div>
+        <div style={{ fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Tag>{ch.status}</Tag>
+          <Text type="secondary">{ch.word_count}字</Text>
+        </div>
+        {/* 分组 + 标签行 */}
+        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          <Select
+            size="small"
+            placeholder="分组"
+            allowClear
+            value={localGroup}
+            onChange={(v) => { setLocalGroup(v); handleSetGroup(ch, v || null); }}
+            style={{ width: 90 }}
+            onClick={(e) => e.stopPropagation()}
+            suffixIcon={<FolderOutlined />}
+            options={groupKeys.map(k => ({ label: k, value: k }))}
+          />
+          {/* 标签 chips */}
+          {(ch.tags || []).map((t, i) => (
+            <Tag
+              key={i}
+              closable
+              onClose={() => { const e = null; e; handleRemoveTag(ch, t); }}
+              style={{ fontSize: 11, cursor: 'pointer' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {t}
+            </Tag>
+          ))}
+          {/* 添加标签 */}
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 2 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Input
+              size="small"
+              placeholder="标签+"
+              value={localTag}
+              onChange={(e) => setLocalTag(e.target.value)}
+              onPressEnter={() => { handleAddTag(ch, localTag); setLocalTag(''); }}
+              style={{ width: 60 }}
+            />
+            <Button size="small" type="text" icon={<PlusOutlined />} onClick={() => { handleAddTag(ch, localTag); setLocalTag(''); }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 }

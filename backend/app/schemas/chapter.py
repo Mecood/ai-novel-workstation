@@ -14,6 +14,8 @@ class ChapterCreate(BaseModel):
     status: str = "draft"
     skeleton: Optional[dict[str, Any]] = None
     content_marks: Optional[list[dict[str, Any]]] = None
+    group: Optional[str] = None
+    tags: Optional[list[str]] = None
 
 
 class ChapterUpdate(BaseModel):
@@ -25,6 +27,8 @@ class ChapterUpdate(BaseModel):
     status: Optional[str] = None
     skeleton: Optional[dict[str, Any]] = None
     content_marks: Optional[list[dict[str, Any]]] = None
+    group: Optional[str] = None
+    tags: Optional[list[str]] = None
 
 
 class ChapterResponse(BaseModel):
@@ -43,6 +47,8 @@ class ChapterResponse(BaseModel):
     history: Optional[Any] = Field(None, alias="_history")
     skeleton: Optional[dict[str, Any]] = Field(None, alias="_skeleton")
     content_marks: Optional[list[dict[str, Any]]] = None
+    group: Optional[str] = None
+    tags: Optional[list[str]] = None
     created_at: datetime
     updated_at: datetime
 
