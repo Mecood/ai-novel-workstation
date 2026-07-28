@@ -62,6 +62,26 @@ export default function WritingPage() {
   const [commitLoading, setCommitLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
 
+  // ── 未保存内容保护 ────────────────────────────────────────────────
+  const isDirty = useRef(false);
+  const lastSavedContent = useRef('');
+
+  const checkDirty = useCallback(() => {
+    return editingContent !== lastSavedContent.current;
+  }, [editingContent]);
+
+  // beforeunload 提醒
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (checkDirty()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [checkDirty]);
+
   const SCORE_COLOR = (score: number) => {
     if (score >= 8) return '#52c41a';
     if (score >= 6) return '#1890ff';
@@ -312,6 +332,23 @@ export default function WritingPage() {
   };
 
   const handleSelectChapter = (ch: Chapter) => {
+    // 如果当前章有未保存内容，提醒用户
+    if (selectedChapter && selectedChapter.id !== ch.id && checkDirty()) {
+      Modal.confirm({
+        title: '未保存的更改',
+        content: '当前章节有未保存的内容，切换将丢失更改。是否继续？',
+        okText: '放弃并切换',
+        cancelText: '停留',
+        onOk: () => {
+          _doSelect(ch);
+        },
+      });
+      return;
+    }
+    _doSelectChapter(ch);
+  };
+
+  const _doSelectChapter = (ch: Chapter) => {
     setSelectedChapter(ch);
     // 提取文本内容，支持 {text: "..."} 格式
     let content = '';
@@ -323,6 +360,7 @@ export default function WritingPage() {
       content = JSON.stringify(ch.content);
     }
     setEditingContent(content);
+    lastSavedContent.current = content;
     fetchPreviousSummary(ch.chapter_number);
     // 加载合同信息
     fetchContract(ch.chapter_number);
@@ -340,6 +378,7 @@ export default function WritingPage() {
         status: selectedChapter.status,
         word_count: content.length,
       } as any);
+      lastSavedContent.current = content;
       message.success('保存成功');
       fetchData();
     } catch (err) {
