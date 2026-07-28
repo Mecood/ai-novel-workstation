@@ -184,7 +184,7 @@ export default function ProjectList() {
           </Empty>
         </Card>
       ) : (
-        <Row gutter={[16, 16]}>
+        <Row gutter={[16, 16]} align="stretch">
           {projects.map((project) => {
             const genre = genreMap[project.genre] || { label: project.genre, color: '#8c8c8c' };
             return (
@@ -214,16 +214,17 @@ export default function ProjectList() {
                   }
                   style={{
                     borderRadius: 12,
-                    height: '100%',
                     background: '#fff',
                     transition: 'box-shadow 0.3s ease, transform 0.2s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    minHeight: 200,
                   }}
                   styles={{
                     body: {
+                      flex: 1,
                       display: 'flex',
                       flexDirection: 'column',
-                      height: '100%',
-                      minHeight: 180,
                     },
                   }}
                 >

@@ -87,6 +87,7 @@ export default function CharactersPage() {
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
             gap: 16,
+            alignItems: 'start',
           }}
         >
           {(characters[0] as any)?._stale === 'true' && (
@@ -98,7 +99,11 @@ export default function CharactersPage() {
             />
           )}
           {characters.map((c) => (
-            <Card key={c.id} hoverable>
+            <Card
+              key={c.id}
+              hoverable
+              style={{ maxHeight: 480, overflow: 'auto' }}
+            >
               <Card.Meta
                 avatar={
                   <Avatar size={48} icon={<UserOutlined />} style={{ background: '#5B9BD5' }} />
@@ -106,19 +111,23 @@ export default function CharactersPage() {
                 title={c.name}
                 description={<Tag color="blue">{c.role_type}</Tag>}
               />
-              <Descriptions column={1} size="small" style={{ marginTop: 16 }}>
+              <Descriptions column={1} size="small" style={{ marginTop: 16 }} layout="vertical">
                 {c.personality && c.personality.length > 0 && (
                   <Descriptions.Item label="性格">
                     {c.personality.map((p, i) => (
-                      <Tag key={i}>{p}</Tag>
+                      <Tag key={i} style={{ marginBottom: 4 }}>{p}</Tag>
                     ))}
                   </Descriptions.Item>
                 )}
                 {c.appearance && (
-                  <Descriptions.Item label="外貌">{c.appearance}</Descriptions.Item>
+                  <Descriptions.Item label="外貌">
+                    <div style={{ maxHeight: 80, overflow: 'auto' }}>{c.appearance}</div>
+                  </Descriptions.Item>
                 )}
                 {c.background && (
-                  <Descriptions.Item label="背景">{c.background}</Descriptions.Item>
+                  <Descriptions.Item label="背景">
+                    <div style={{ maxHeight: 80, overflow: 'auto' }}>{c.background}</div>
+                  </Descriptions.Item>
                 )}
               </Descriptions>
             </Card>
