@@ -24,8 +24,7 @@ class StoryEvent(Base):
     evidence = Column(Text, nullable=True)
 
     order = Column(Integer, default=0)
-    # ── timeline_track 待下次 DB migration ──
-    # timeline_track = Column(Text, default="main")
+    timeline_track = Column(Text, default="main")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

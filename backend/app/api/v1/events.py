@@ -24,6 +24,7 @@ from pydantic import BaseModel
 
 class EventUpdate(BaseModel):
     order: int | None = None
+    timeline_track: str | None = None
 
 
 # ── 1) 触发提取（SSE 流） ───────────────────────────────────────────────
@@ -234,6 +235,8 @@ async def update_event(
         raise HTTPException(403, "Event does not belong to this project")
     if body.order is not None:
         event.order = body.order
+    if body.timeline_track is not None:
+        event.timeline_track = body.timeline_track
     await db.commit()
     await db.refresh(event)
     return extraction_service._event_to_dict(event)

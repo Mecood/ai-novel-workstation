@@ -276,6 +276,7 @@ class ExtractionService:
             "confidence": float(se.confidence) if se.confidence is not None else 1.0,
             "evidence": se.evidence,
             "order": se.order,
+            "timeline_track": se.timeline_track or "main",
             "created_at": se.created_at.isoformat() if se.created_at else None,
         }
 
