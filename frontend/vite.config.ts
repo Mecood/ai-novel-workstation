@@ -15,5 +15,9 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/v1/, '/api/v1'),
       },
     },
+    allowedHosts: ['.ngrok-free.dev'],
+  },
+  optimizeDeps: {
+    include: ['@tiptap/react', '@tiptap/starter-kit', '@tiptap/extension-underline'],
   },
 });
