@@ -46,6 +46,7 @@ const menuItems = [
   { key: 'events', icon: <ThunderboltOutlined />, label: '事件时间线' },
   { key: 'debt', icon: <DollarOutlined />, label: '伏笔债务' },
   { key: 'contracts', icon: <FileProtectOutlined />, label: '合同管理' },
+  { key: 'export', icon: <ExportOutlined />, label: '导出' },
   { key: 'task-book', icon: <SolutionOutlined />, label: '写作任务书' },
   { type: 'divider' as const },
   { key: 'settings', icon: <SettingOutlined />, label: '项目设置' },

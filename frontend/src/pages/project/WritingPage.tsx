@@ -151,6 +151,16 @@ export default function WritingPage() {
   }, [id]);
   useEffect(() => { if (streamRef.current) streamRef.current.scrollTop = streamRef.current.scrollHeight; }, [streamContent]);
 
+  // ── Autosave：每 30 秒自动保存脏内容 ─────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (id && selectedChapter && editingContent && checkDirty() && !saving) {
+        handleSave(editingContent);
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [id, selectedChapter, editingContent, saving, checkDirty]);
+
   // ── 分组 / 标签 工具 ────────────────────────────────────────────
   const groupedChapters = chapters.reduce((acc, ch) => {
     const key = ch.group || '__ungrouped__';

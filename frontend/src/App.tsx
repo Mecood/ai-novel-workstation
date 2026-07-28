@@ -23,6 +23,7 @@ import ContextAgentView from './pages/project/ContextAgentView';
 import DeconstructionPage from './pages/project/DeconstructionPage';
 import InitWizardPage from './pages/project/InitWizardPage';
 import ImportPage from './pages/project/ImportPage';
+import ExportPage from './pages/project/ExportPage';
 import AnalysisPage from './pages/project/AnalysisPage';
 import RelationshipPage from './pages/project/RelationshipPage';
 import ProjectSettingsPage from './pages/project/ProjectSettingsPage';
@@ -87,6 +88,7 @@ function App() {
           <Route path="/projects/new" element={<InitWizardPage />} />
           <Route path="/projects/:id/init-wizard" element={<InitWizardPage />} />
           <Route path="/projects/:id/import" element={<ImportPage />} />
+          <Route path="/projects/:id/export" element={<ExportPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </BrowserRouter>
