@@ -14,6 +14,7 @@ import {
   Empty,
   Tag,
   Divider,
+  Select,
 } from 'antd';
 import {
   HistoryOutlined,
@@ -33,8 +34,10 @@ export default function VersionHistoryPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
-  const [chapterId, setChapterId] = useState<string>(searchParams.get('chapter') || '');
+  const queryChapterId = searchParams.get('chapter') || '';
+  const [chapterId, setChapterId] = useState<string>(queryChapterId);
   const [chapterTitle, setChapterTitle] = useState('');
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<VersionDetail | null>(null);
   const [restoring, setRestoring] = useState<number | null>(null);
@@ -43,6 +46,21 @@ export default function VersionHistoryPage() {
   const [diffOpen, setDiffOpen] = useState(false);
 
   const projectId = id || '';
+
+  const loadChapters = async () => {
+    if (!projectId) return;
+    try {
+      const { data } = await chapterApi.list(projectId);
+      const list = Array.isArray(data) ? data : [];
+      setChapters(list);
+      // Auto-select first chapter if none selected
+      if (!chapterId && list.length > 0) {
+        setChapterId(list[0].id);
+      }
+    } catch {
+      // non-blocking
+    }
+  };
 
   const loadVersions = async (cid: string) => {
     if (!projectId || !cid) return;
@@ -62,22 +80,30 @@ export default function VersionHistoryPage() {
 
   const loadChapterTitle = async (cid: string) => {
     if (!projectId || !cid) return;
+    const ch = chapters.find((c: Chapter) => c.id === cid);
+    if (ch) {
+      setChapterTitle(`${ch.chapter_number}：${ch.title}`);
+      return;
+    }
     try {
-      const { data: chapters } = await chapterApi.list(projectId);
-      const ch = chapters?.find((c: Chapter) => c.id === cid);
-      setChapterTitle(ch ? `${ch.chapter_number}：${ch.title}` : '');
+      const { data } = await chapterApi.list(projectId);
+      const found = data?.find((c: Chapter) => c.id === cid);
+      setChapterTitle(found ? `${found.chapter_number}：${found.title}` : '');
     } catch {
       // non-blocking
     }
   };
 
   useEffect(() => {
-    const cid = searchParams.get('chapter') || '';
-    if (cid) {
-      loadVersions(cid);
-      loadChapterTitle(cid);
+    loadChapters();
+  }, [projectId]);
+
+  useEffect(() => {
+    if (chapterId) {
+      loadVersions(chapterId);
+      loadChapterTitle(chapterId);
     }
-  }, [projectId, chapterId, searchParams.get('chapter')]);
+  }, [chapterId]);
 
   const handlePreview = async (entry: VersionEntry) => {
     try {
@@ -155,6 +181,8 @@ export default function VersionHistoryPage() {
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 24,
+          flexWrap: 'wrap',
+          gap: 12,
         }}
       >
         <Space>
@@ -166,7 +194,19 @@ export default function VersionHistoryPage() {
           </Title>
           {chapterTitle && <Text type="secondary">{chapterTitle}</Text>}
         </Space>
-        <Text type="secondary">当前版本号：{currentVersion}</Text>
+        <Space>
+          <Select
+            style={{ minWidth: 240 }}
+            placeholder="选择章节"
+            value={chapterId || undefined}
+            onChange={(val) => setChapterId(val)}
+            options={chapters.map(ch => ({
+              value: ch.id,
+              label: `第${ch.chapter_number}章 ${ch.title}`,
+            }))}
+          />
+          <Text type="secondary">版本号：{currentVersion}</Text>
+        </Space>
       </div>
 
       <Card title={<Space><HistoryOutlined /> 版本列表</Space>}
