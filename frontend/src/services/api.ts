@@ -899,3 +899,16 @@ export const companionApi = {
   }) =>
     api.post<{ ideas: InspirationIdea[] }>(`/companion/inspirations`, body),
 };
+// ── Topic Research ────────────────────────────────────────────────────
+export interface TopicResearch {
+  genre: string;
+  market_summary: string;
+  hot_trends: string[];
+  recommendations: { angle: string; score: number; description: string; entry_point: string }[];
+}
+export const topicResearchApi = {
+  research: (genre: string, projectName?: string) =>
+    api.get<TopicResearch>('/projects/topic/research', {
+      params: { genre, project_name: projectName || '' },
+    }),
+};

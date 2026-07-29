@@ -94,7 +94,12 @@ async def research_topic(
         raise HTTPException(400, "AI 未配置，请先在设置中添加模型供应商")
     active = config.config.get("active_provider")
     providers = config.config.get("providers", [])
-    active_provider = next((p for p in providers if p.get("name") == active), None)
+    active_provider_idx = config.config.get("active_provider")
+    active_provider = None
+    if isinstance(active_provider_idx, int) and 0 <= active_provider_idx < len(providers):
+        active_provider = providers[active_provider_idx]
+    elif isinstance(active_provider_idx, str):
+        active_provider = next((p for p in providers if p.get("name") == active_provider_idx), None)
     if not active_provider or not active_provider.get("api_key"):
         raise HTTPException(400, "AI 未配置")
 

@@ -10,7 +10,7 @@ import {
   PlayCircleOutlined, SearchOutlined, BulbOutlined, LayoutOutlined,
 } from '@ant-design/icons';
 import AppLayout from '../../components/layout/AppLayout';
-import { api, projectApi, templateApi } from '../../services/api';
+import { api, projectApi, templateApi, topicResearchApi } from '../../services/api';
 import type { GenreTemplate } from '../../services/api';
 
 const { Title, Paragraph, Text } = Typography;
@@ -160,12 +160,7 @@ export default function InitWizardPage() {
     setResearchLoading(true);
     setResearchResult(null);
     try {
-      const resp = await fetch(`/api/v1/projects/topic/research?genre=${encodeURIComponent(genre)}&project_name=${encodeURIComponent(projectName)}`);
-      if (!resp.ok) {
-        const txt = await resp.text();
-        throw new Error(txt);
-      }
-      const data = await resp.json();
+      const { data } = await topicResearchApi.research(genre, projectName);
       setResearchResult(data);
     } catch (e: any) {
       message.error('选题调研失败：' + (e.message || '未知错误'));
