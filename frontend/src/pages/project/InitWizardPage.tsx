@@ -353,8 +353,17 @@ export default function InitWizardPage() {
             <Space direction="vertical" size={16} style={{ width: '100%' }}>
               <Title level={5}>AI 选题调研</Title>
               <Text type="secondary">
-                基于当前网文市场趋势，AI 分析「{genre}」题材的竞争环境、读者偏好，并推荐 3 个差异化切入点方案。
+                选择你想创作的题材，AI 将分析当前网文市场趋势，推荐差异化切入点方案。
               </Text>
+              <Select
+                style={{ width: 260 }}
+                placeholder="请先选择题材"
+                value={genre || undefined}
+                onChange={handleGenreChange}
+                options={genreOptions}
+                showSearch
+                optionFilterProp="label"
+              />
               {!researchResult ? (
                 <div style={{ textAlign: 'center', padding: 30 }}>
                   <Button
@@ -362,6 +371,7 @@ export default function InitWizardPage() {
                     size="large"
                     icon={<SearchOutlined />}
                     loading={researchLoading}
+                    disabled={!genre}
                     onClick={handleResearch}
                   >
                     开始调研
