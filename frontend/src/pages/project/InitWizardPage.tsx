@@ -18,9 +18,9 @@ const { TextArea } = Input;
 
 // 新的步骤定义
 const WIZARD_STEPS = [
-  { key: 0, title: '项目与题材', icon: <BookOutlined /> },
-  { key: 1, title: '选题调研', icon: <SearchOutlined /> },
-  { key: 2, title: '创意激发', icon: <BulbOutlined /> },
+  { key: 0, title: '选题调研', icon: <SearchOutlined /> },
+  { key: 1, title: '创意激发', icon: <BulbOutlined /> },
+  { key: 2, title: '项目与题材', icon: <BookOutlined /> },
   { key: 3, title: '风格设定', icon: <RocketOutlined /> },
   { key: 4, title: '开始初始化', icon: <ThunderboltOutlined /> },
   { key: 5, title: '完成', icon: <CheckCircleOutlined /> },
@@ -290,8 +290,15 @@ export default function InitWizardPage() {
 
   const handleNext = () => {
     if (step === 4) { startInit(); return; }
+    if (step === 1) { setStep(2); return; } // 创意激发 → 项目与题材
+    if (step === 0) { setStep(1); return; } // 选题调研 → 创意激发
     setStep(step + 1);
   };
+
+  // 选题调研完成 → 创意激发（step 1），完后 → 项目与题材（step 2）→ 风格设定（step 3）→ 初始化（step 4）
+  const handleNextFromResearch = () => { setStep(1); };
+  const handleNextFromCreative = () => { setStep(2); };
+  const handleNextFromProject = () => { setStep(3); };
 
   const handleFinish = () => {
     navigate(`/projects/${projectId}/workshop`);
@@ -311,10 +318,10 @@ export default function InitWizardPage() {
   };
 
   const canNext = (): boolean => {
-    if (step === 0) return !!genre && projectName.trim().length >= 2;
-    if (step === 1) return !!researchResult;
-    if (step === 2) return !!comboResult;
-    if (step === 3) return !!styleParams;
+    if (step === 0) return !!researchResult;          // 选题调研 → 需有结果
+    if (step === 1) return !!comboResult;              // 创意激发 → 需有组合
+    if (step === 2) return !!genre && projectName.trim().length >= 2; // 项目与题材 → 需名称+体裁
+    if (step === 3) return !!styleParams;              // 风格设定 → 需有参数
     return true;
   };
 
@@ -341,49 +348,8 @@ export default function InitWizardPage() {
         <Steps current={step} items={wizardSteps} style={{ marginBottom: 24 }} size="small" />
 
         <Card>
-          {/* ====================== 步骤 0: 项目信息 ====================== */}
+          {/* ====================== 步骤 0：选题调研 ====================== */}
           {step === 0 && (
-            <Space direction="vertical" size={16} style={{ width: '100%' }}>
-              <Title level={5}>项目信息</Title>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Text strong>项目名称</Text>
-                  <Input
-                    placeholder="例如：《元戒》《星河纪》"
-                    value={projectName}
-                    onChange={e => setProjectName(e.target.value)}
-                    allowClear
-                  />
-                </Col>
-                <Col span={12}>
-                  <Text strong>题材</Text>
-                  <Select
-                    style={{ width: '100%' }}
-                    placeholder="请选择题材"
-                    value={genre}
-                    onChange={handleGenreChange}
-                    options={genreOptions}
-                    showSearch
-                    optionFilterProp="label"
-                    allowClear
-                  />
-                </Col>
-              </Row>
-              {genreTemplate && (
-                <Card size="small">
-                  <Space direction="vertical" size={4}>
-                    <Text><Text strong>类别：</Text>{genreTemplate.category}</Text>
-                    {genreTemplate.config?.pacing && (
-                      <Text><Text strong>节奏：</Text>每章约 {genreTemplate.config.pacing.typical_chapter_word_count} 字</Text>
-                    )}
-                  </Space>
-                </Card>
-              )}
-            </Space>
-          )}
-
-          {/* ====================== STEP 1：选题调研 ====================== */}
-          {step === 1 && (
             <Space direction="vertical" size={16} style={{ width: '100%' }}>
               <Title level={5}>AI 选题调研</Title>
               <Text type="secondary">
@@ -460,8 +426,8 @@ export default function InitWizardPage() {
             </Space>
           )}
 
-          {/* ====================== 步骤 2：创意激发 ====================== */}
-          {step === 2 && (
+          {/* ====================== 步骤 1：创意激发 ====================== */}
+          {step === 1 && (
             <Space direction="vertical" size={16} style={{ width: '100%' }}>
               <Title level={5}>创意激发 + 主题填充</Title>
               {!comboResult ? (
@@ -501,6 +467,47 @@ export default function InitWizardPage() {
                     </Text>
                   </div>
                 </>
+              )}
+            </Space>
+          )}
+
+          {/* ====================== 步骤 2：项目信息 ====================== */}
+          {step === 2 && (
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Title level={5}>项目信息</Title>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Text strong>项目名称</Text>
+                  <Input
+                    placeholder="例如：《元戒》《星河纪》"
+                    value={projectName}
+                    onChange={e => setProjectName(e.target.value)}
+                    allowClear
+                  />
+                </Col>
+                <Col span={12}>
+                  <Text strong>题材</Text>
+                  <Select
+                    style={{ width: '100%' }}
+                    placeholder="请选择题材"
+                    value={genre}
+                    onChange={handleGenreChange}
+                    options={genreOptions}
+                    showSearch
+                    optionFilterProp="label"
+                    allowClear
+                  />
+                </Col>
+              </Row>
+              {genreTemplate && (
+                <Card size="small">
+                  <Space direction="vertical" size={4}>
+                    <Text><Text strong>类别：</Text>{genreTemplate.category}</Text>
+                    {genreTemplate.config?.pacing && (
+                      <Text><Text strong>节奏：</Text>每章约 {genreTemplate.config.pacing.typical_chapter_word_count} 字</Text>
+                    )}
+                  </Space>
+                </Card>
               )}
             </Space>
           )}
@@ -569,7 +576,7 @@ export default function InitWizardPage() {
           {/* ====================== 底部导航 ====================== */}
           <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
             <Button
-              onClick={() => setStep(step - 1)}
+              onClick={() => setStep(Math.max(0, step - 1))}
               disabled={step === 0 || (step === 4 && running)}
             >
               上一步
@@ -588,12 +595,12 @@ export default function InitWizardPage() {
               {step !== 4 && step !== 5 && (
                 <Button
                   type="primary"
-                  icon={step === 0 ? <PlayCircleOutlined /> : undefined}
-                  loading={step === 0 ? creatingProject : false}
-                  onClick={step === 0 ? handleCreateProject : handleNext}
+                  icon={step === 2 ? <PlayCircleOutlined /> : undefined}
+                  loading={step === 2 ? creatingProject : false}
+                  onClick={step === 2 ? handleCreateProject : handleNext}
                   disabled={!canNext()}
                 >
-                  {step === 0 ? '创建并继续' : step === 3 ? '开始初始化' : '下一步'}
+                  {step === 2 ? '创建并继续' : step === 3 ? '开始初始化' : '下一步'}
                 </Button>
               )}
             </Space>
