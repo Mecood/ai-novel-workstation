@@ -157,7 +157,7 @@ function L1Tab({ l1 }: { l1: TierL1Result }) {
   };
 
   const L1_THRESHOLDS: Record<string, string> = {
-    word_count: '2000-5000字',
+    word_count: '4300-10000字',
     title_not_empty: '非空',
     skeleton_present: '有骨架定义',
     character_event_new: '有新增',

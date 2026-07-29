@@ -41,10 +41,13 @@ async def _ensure_ai_configured(db: AsyncSession) -> None:
 
     active = config.config.get("active_provider")
     providers = config.config.get("providers", [])
-    if not active or not providers:
+    if active is None or not providers:
         raise HTTPException(status_code=400, detail="AI 未配置，请先在设置中选择激活的模型供应商")
 
-    active_provider = next((p for p in providers if p.get("name") == active), None)
+    active_provider_idx = config.config.get("active_provider")
+    active_provider = None
+    if isinstance(active_provider_idx, int) and 0 <= active_provider_idx < len(providers):
+        active_provider = providers[active_provider_idx]
     if not active_provider or not active_provider.get("api_key"):
         raise HTTPException(status_code=400, detail="AI 未配置：激活的供应商缺少 API Key")
 
