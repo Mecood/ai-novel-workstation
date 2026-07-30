@@ -45,4 +45,4 @@ chroma_db/
 
 # Test artifacts
 test_imports.py
-test_*.sh
+test_*.shbackend/models/
