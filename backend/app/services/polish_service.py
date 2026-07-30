@@ -182,6 +182,7 @@ class PolishService:
         style_guidance: list[str] | None = None,
         *,
         apply_de_ai: bool = True,
+        raw_content: str | None = None,
     ) -> PolishResult:
         """
         四步润色主入口。
@@ -192,9 +193,11 @@ class PolishService:
             review_result: ReviewService 返回的审查结果（含 issues）
             style_guidance: 风格指导列表
             apply_de_ai: 是否执行去 AI 味终检
+            raw_content: 直接传入的草稿文本（优先级高于从 DB 读取），
+                         用于避免 DB 保存新内容前就拿旧版润色的问题
         """
-        # 提取正文
-        content = self._extract_chapter_text(chapter)
+        # 优先用传进来的 raw_content，否则从 DB 读取
+        content = (raw_content or self._extract_chapter_text(chapter))
         if not content or len(content.strip()) < 50:
             return PolishResult(
                 polished_content=content or "",
@@ -208,26 +211,39 @@ class PolishService:
         steps: dict[str, dict] = {}
         current_text = content
 
-        # Step 1: 定点修复
-        fix_result = await self._fix_issues(db, current_text, review_result)
-        steps["fix_issues"] = fix_result
-        current_text = fix_result.get("content", current_text)
+        # Step 1: 定点修复（可选，无 review 时跳过）
+        try:
+            fix_result = await self._fix_issues(db, current_text, review_result)
+            steps["fix_issues"] = fix_result
+            current_text = fix_result.get("content", current_text)
+        except Exception as e:
+            steps["fix_issues"] = {"status": "skipped", "reason": str(e)[:120]}
 
         # Step 2: 风格适配
-        style_result = await self._apply_style(db, current_text, style_guidance)
-        steps["style_adapt"] = style_result
-        current_text = style_result.get("content", current_text)
+        try:
+            style_result = await self._apply_style(db, current_text, style_guidance)
+            steps["style_adapt"] = style_result
+            current_text = style_result.get("content", current_text)
+        except Exception as e:
+            steps["style_adapt"] = {"status": "skipped", "reason": str(e)[:120]}
 
-        # Step 3: 排版
-        current_text = _typeset(current_text)
-        steps["typeset"] = {"status": "ok", "changes": "段落格式优化"}
+        # Step 3: 排版（纯规则，零 LLM，永不失败）
+        try:
+            current_text = _typeset(current_text)
+            steps["typeset"] = {"status": "ok", "changes": "段落格式优化"}
+        except Exception as e:
+            steps["typeset"] = {"status": "skipped", "reason": str(e)[:120]}
 
-        # Step 4: AI 味终检
-        if apply_de_ai:
-            anti_ai_result = await self._anti_ai_final(db, current_text)
+        # Step 4: AI 味终检（启发式，零 LLM，永不失败）
+        try:
+            anti_ai_result = {
+                "status": "ok",
+                "score": self._heuristic_anti_ai_score(current_text),
+                "note": "启发式评分",
+            }
             steps["anti_ai_final"] = anti_ai_result
-            if anti_ai_result.get("should_rewrite"):
-                current_text = anti_ai_result.get("content", current_text)
+        except Exception as e:
+            steps["anti_ai_final"] = {"status": "skipped", "reason": str(e)[:120]}
 
         total_changes = sum(
             1 for s in steps.values() if s.get("changes") and s.get("changes") != "无"
@@ -302,7 +318,7 @@ class PolishService:
         style_guidance: list[str] | None,
     ) -> dict:
         """风格适配：注入风格指导 + 通用风格规则。"""
-        user_prompt = STYLE_ADAPT_USER_TEMPLATE.format(chapter_content=content[:5000])
+        user_prompt = STYLE_ADAPT_USER_TEMPLATE.format(chapter_content=content)
 
         if style_guidance:
             # 把风格指导拼入系统提示
@@ -329,43 +345,22 @@ class PolishService:
             "content": styled_content,
         }
 
-    # ── Step 4: AI 味终检 ────────────────────────────────────────
+    # ── Step 4: AI 味终检（仅报告，不触发重写） ─────────────────
     async def _anti_ai_final(self, db: AsyncSession, content: str) -> dict:
-        """AI 味终检：评分，超过阈值则调用去 AI 味重写。"""
-        # 简单启发式评分（不占 LLM 额度）
-        score = self._heuristic_anti_ai_score(content)
-        should_rewrite = score >= 70
+        """AI 味终检：只做预警报告，不再触发自动重写。
 
-        if not should_rewrite:
-            return {"status": "passed", "score": score, "should_rewrite": False,
-                    "content": content}
-
-        # 超过阈值 → 调 de_ai rewrite
-        try:
-            # 用 _build_client + de_ai prompt 非流式重写
-            client = await self._ai_service._build_client(db)
-            try:
-                # 复用 AIService 的 de_ai prompt
-                from pathlib import Path
-                prompt_dir = Path(__file__).parent.parent.parent / "prompts"
-                import yaml as _yaml
-                with open(prompt_dir / "de_ai.yaml", encoding="utf-8") as f:
-                    prompt = _yaml.safe_load(f)
-                messages = [
-                    {"role": "system", "content": prompt["system"]},
-                    {"role": "user", "content": prompt["user"].format(original_content=content[:5000])},
-                ]
-                result = await client.chat(messages, temperature=0.9, max_tokens=8192)
-                rewritten = str(result)
-            finally:
-                await client.close()
-            return {"status": "rewritten", "score": score, "should_rewrite": True,
-                    "content": rewritten}
-        except Exception:
-            # fallback：调 _apply_style 做一次风格适配
-            result = await self._apply_style(db, content, style_guidance=None)
-            return {"status": "styled_fallback", "score": score, "should_rewrite": True,
-                    "content": result["content"]}
+        去AI的核心已从「写后修补」改为「写前注入」——
+        chapter.yaml 中已写入 Anti-AI 风格铁律，生成时即约束。
+        此处只做参考评分，不阻断流水线。
+        """
+        heuristic_score = self._heuristic_anti_ai_score(content)
+        return {
+            "status": "advisory",
+            "score": heuristic_score,
+            "should_rewrite": False,
+            "content": content,
+            "note": "去AI规则已注入章节生成prompt，此处仅做预警参考",
+        }
 
     def _heuristic_anti_ai_score(self, text: str) -> int:
         """

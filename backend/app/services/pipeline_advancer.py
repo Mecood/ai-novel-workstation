@@ -50,7 +50,7 @@ class PipelineTransition(Base):
     """Log of pipeline stage transitions."""
     __tablename__ = "pipeline_transitions"
 
-    id = Column(GUID, primary_key=True, default=str(uuid.uuid4))
+    id = Column(GUID, primary_key=True, default=lambda: str(uuid.uuid4()))
     project_id = Column(GUID, nullable=False)
     from_stage = Column(String(50), nullable=False)
     to_stage = Column(String(50), nullable=False)

@@ -29,6 +29,11 @@ def _extract_text(obj: Any) -> str:
     """把 JSON 对象拍平成纯文本，用于简单匹配。"""
     if isinstance(obj, str):
         return obj
+    if obj is None:
+        return ""
+    if isinstance(obj, (list, tuple)):
+        # personality 是 list[str]、rules 也是 list
+        return " ".join(_extract_text(item) for item in obj)
     if isinstance(obj, dict):
         # Chapter.content 通常是 {'text': '正文...'}
         if 'text' in obj and isinstance(obj['text'], str):

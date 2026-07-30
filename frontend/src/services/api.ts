@@ -61,6 +61,8 @@ export interface Project {
   genre: string;
   status: string;
   story_core?: any;
+  context?: any;
+  template_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -77,6 +79,7 @@ export interface ProjectUpdate {
   genre?: string;
   status?: string;
   story_core?: any;
+  context?: any;
 }
 
 export const projectApi = {

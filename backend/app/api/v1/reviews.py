@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 from uuid import UUID
 
 from app.core.database import get_db, async_session
@@ -346,10 +347,17 @@ async def polish_chapter(
                 polish_db, chapter,
                 review_result=review_data,
             )
-            # Save polished content back
+            # Save polished content back via direct SQL (bypass JSON dirty-tracking)
             polished_text = result.polished_content
-            chapter.content = {"text": polished_text}
-            chapter.word_count = len(polished_text)
+            from sqlalchemy import update as sql_update
+            await polish_db.execute(
+                sql_update(Chapter)
+                .where(Chapter.id == chapter.id)
+                .values(
+                    content={"text": polished_text},
+                    word_count=len(polished_text),
+                )
+            )
             await polish_db.commit()
         except Exception:
             await polish_db.rollback()

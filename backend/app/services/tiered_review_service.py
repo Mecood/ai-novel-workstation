@@ -140,12 +140,12 @@ class TieredReviewService:
 
     @staticmethod
     def _get_word_count_range(project: Project) -> dict[str, int]:
-        """从项目配置获取字数范围，默认 2000-5000。"""
+        """从项目配置获取字数范围，默认 4300-10000。"""
         story_core = project.story_core or {}
         wc_config = story_core.get("word_count_range", {})
         return {
-            "min": wc_config.get("min", 2000),
-            "max": wc_config.get("max", 5000),
+            "min": wc_config.get("min", 4300),
+            "max": wc_config.get("max", 10000),
         }
 
     async def _check_new_entities(
@@ -636,29 +636,80 @@ class TieredReviewService:
     ) -> dict[str, Any]:
         """
         发明需识别 — AI 新增的设定/角色/事件必须标记为 "invented" 而不是 "existing"。
-        - 结合 L1 的 new_entities 检查结果
-        - 调用 LLM 检测正文中是否有 AI 新增但未标记的元素
-        - 重点检测：新角色名、新地名、新物品、新事件、新设定等
+        已知世界观名词（来自 worldview / story_core / character）必须排除，不计为新发明。
         """
         content = self._extract_chapter_text(chapter)
 
-        # 获取已知角色名
+        # 1) 已知角色信息（名字 + 背景 + 外貌，让 LLM 知道这些能力不算新发明）
         char_result = await db.execute(
             select(Character).where(Character.project_id == project.id)
         )
-        known_chars = {c.name for c in char_result.scalars().all()}
+        all_chars = char_result.scalars().all()
+        known_chars = {c.name for c in all_chars if c.name}
 
-        # 调用 LLM 检测
+        # 角色背景摘要（注入 LLM 以识别角色已定义的能力）
+        char_backgrounds = []
+        for c in all_chars:
+            if not c.name:
+                continue
+            info = f"角色「{c.name}」"
+            if c.background:
+                info += f" 背景：{c.background}"
+            if c.personality:
+                info += f" 性格：{', '.join(c.personality) if isinstance(c.personality, list) else str(c.personality)}"
+            if c.appearance:
+                info += f" 外貌：{c.appearance}"
+            char_backgrounds.append(info)
+
+        # 2) 世界观设定 — 注入 LLM，让它排除世界观已有名词
+        wv_result = await db.execute(
+            select(Worldview).where(Worldview.project_id == project.id)
+        )
+        worldviews = wv_result.scalars().all()
+        worldview_texts = []
+        for wv in worldviews:
+            if wv.description:
+                worldview_texts.append(wv.description)
+            for wv_desc in (wv.description, wv.rules, wv.timeline):
+                if wv_desc and wv_desc not in worldview_texts:
+                    worldview_texts.append(str(wv_desc) if isinstance(wv_desc, (dict, list)) else wv_desc)
+
+        # 3) story_core 中的世界观描述
+        story_core = project.story_core or {}
+        story_core_text = json.dumps(
+            {k: v for k, v in story_core.items() if not k.startswith("_")},
+            ensure_ascii=False,
+        )[:2000]
+
+        # 4) 已知设定提示语（告诉 LLM 这些不算新发明）
+        known_setting_section = ""
+        if known_chars:
+            known_setting_section += "【已有角色名】\n" + "\n".join(f"- {n}" for n in sorted(known_chars)) + "\n"
+        if char_backgrounds:
+            known_setting_section += "\n【角色设定】（以下角色的背景、能力、关系已定义，相关描述不算新发明）\n" + "\n\n".join(char_backgrounds) + "\n"
+        if worldview_texts:
+            known_setting_section += "\n【世界观设定】（这些词/概念已经存在于世界观中，不算新发明）\n" + "\n\n".join(worldview_texts[:3]) + "\n"
+        if story_core_text:
+            known_setting_section += "\n【故事核心 / 核心设定】\n" + story_core_text + "\n"
+
+        # 5) 调用 LLM 检测
         prompt = (
-            "你是一位小说内容审计员。请检查本章正文中，哪些元素是AI系统新增的 "
-            "（不在已有设定中），但可能没有被正确标记为 'invented'.\n\n"
-            "已有角色名：\n" + "\n".join(f"- {n}" for n in sorted(known_chars)) + "\n\n"
+            "你是一位小说内容审计员。请检查本章正文中，哪些元素是AI系统在本章\n"
+            "中凭空创造的新设定（即：不属于项目既有世界观、故事核心、角色设定的全新内容），\n"
+            "但可能没有被正确标记为 'invented'。\n\n"
+            "===== 以下是在此项目已定义的内容（这些不算新发明） =====\n"
+            f"{known_setting_section}\n"
+            "==============================================\n\n"
             f"### 本章正文\n{content[:3000]}\n\n"
-            "请检查以下类型的元素：\n"
-            "1. 角色名：正文中出现的角色名，是否出现在已有角色列表中\n"
-            "2. 地名：新出现的地点/场景，是否在已有世界观中定义\n"
-            "3. 物品/道具：新出现的物品/功法/宝物，是否是已有设定\n"
-            "4. 事件/设定：新引入的规则或事件，是否是已有设定\n\n"
+            "检查标准（重要）：\n"
+            "1. 角色名：正文中出现但不在【已有角色名】中的角色，才算新发明\n"
+            "2. 地名：正文中出现但未在【世界观设定】/【故事核心】中出现的新地点\n"
+            "3. 物品/道具：正文中出现但未在任何已有设定中出现的全新物品\n"
+            "4. 规则/设定：正文中引入的全新世界观规则\n\n"
+            "⚠️ 以下情况算【已有设定】，不算新发明：\n"
+            "   - 世界观描述、故事核心中已出现过的概念和名词\n"
+            "   - 角色设定（背景、能力）中已描述的内容\n"
+            "   - 前文已出现过的角色、物品\n\n"
             "输出严格 JSON 格式（不要 markdown 包裹）：\n"
             "{\n"
             '  "has_unflagged_invention": true/false,\n'
@@ -671,7 +722,7 @@ class TieredReviewService:
             '      "is_blocking": true/false\n'
             "    }\n"
             "  ],\n"
-            '  "detail": "总结" \n'
+            '  "detail": "总结"\n'
             "}"
         )
 
@@ -679,7 +730,7 @@ class TieredReviewService:
         try:
             result = str(await client.chat(
                 messages=[
-                    {"role": "system", "content": "你是一位严格的内容审计员。"},
+                    {"role": "system", "content": "你是一位严格的内容审计员。请严格区分'已有世界观设定'和'AI新发明'，已有世界观名词绝不算新发明。"},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.1,
@@ -702,7 +753,7 @@ class TieredReviewService:
             "detail": (
                 f"所有 {len(items)} 个新增元素均已标记"
                 if len(unflagged) == 0
-                else f"{len(unflagged)} 个新增元素未标记："
+                else f"{len(unflagged)} 个新增元素未标记："\
                       f"{', '.join(i.get('name', '') for i in unflagged)}"
             ),
             "blocking": len(unflagged) > 0,

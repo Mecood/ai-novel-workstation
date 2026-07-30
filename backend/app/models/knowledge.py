@@ -17,5 +17,8 @@ class Knowledge(Base):
     source = Column(String(20), nullable=False, default="manual")  # manual / auto
     source_type = Column(String(50), nullable=True)  # worldview / character / chapter / story_core
     source_id = Column(GUID, nullable=True)  # 关联的实体ID
+    confidence = Column(Integer, nullable=False, default=0)  # 0-100
+    status = Column(String(20), nullable=False, default='active')  # active / pending
+    locked = Column(Integer, nullable=False, default=0)  # 1=locked by user, AI may not overwrite
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

@@ -16,6 +16,7 @@ class ProjectUpdate(BaseModel):
     genre: Optional[str] = None
     status: Optional[str] = None
     story_core: Optional[Any] = None
+    context: Optional[Any] = None
 
 
 class ProjectResponse(BaseModel):
@@ -25,6 +26,8 @@ class ProjectResponse(BaseModel):
     genre: str
     status: str
     story_core: Optional[Any] = None
+    context: Optional[Any] = None
+    template_id: Optional[Any] = None
     created_at: datetime
     updated_at: datetime
 

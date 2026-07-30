@@ -223,6 +223,8 @@ class ContextAgentService:
             char_lines = []
             char_lines.append(f"{c.name}（{c.role_type}）")
             char_lines.append(f"状态：{c.background or '（未设置）'}")
+            if c.personality:
+                char_lines.append(f"性格：{c.personality}")
             if char_states.get(c.name):
                 char_lines.append(f"近期状态：{char_states[c.name].rstrip('；')}")
             if char_relationships.get(c.name):

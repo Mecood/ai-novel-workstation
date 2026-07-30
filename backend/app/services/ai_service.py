@@ -72,6 +72,26 @@ class AIService:
 
         return AIClient(url=url, api_key=api_key, model=model)
 
+    async def _build_client_with_provider(self, db: AsyncSession, provider_index: int) -> AIClient:
+        """Build an AIClient using a specific provider by index."""
+        result = await db.execute(select(AppConfig).where(AppConfig.id == 1))
+        app_config = result.scalar_one_or_none()
+        config = (app_config.config if app_config else None) or {}
+
+        providers = config.get("providers") or []
+        if not providers or not (0 <= provider_index < len(providers)):
+            raise HTTPException(400, f"提供商索引无效：{provider_index}")
+
+        provider = providers[provider_index]
+        url = provider.get("url")
+        api_key = provider.get("api_key")
+        model = provider.get("selected_model")
+        if not url or not api_key:
+            raise HTTPException(400, f"提供商 {provider_index} 配置不完整")
+        if not model:
+            raise HTTPException(400, f"提供商 {provider_index} 未选择模型")
+        return AIClient(url=url, api_key=api_key, model=model)
+
     async def generate_story_core(self, db: AsyncSession, project: Project) -> str:
         """Generate story core based on project info."""
         prompt = self._load_prompt("story_core")
@@ -138,9 +158,34 @@ class AIService:
         prompt = self._load_prompt("chapter")
 
         char_summary = "\n".join([
-            f"- {c.name}（{c.role_type}）: {c.background}"
+            f"- {c.name}（{c.role_type}）："
+            f"性格：{c.personality}。"
+            f"{c.background}"
             for c in characters
         ])
+
+        # ── 已锁定知识锚定（生成时只读不改）────────────────────────
+        locked_knowledge_section = ""
+        try:
+            from app.models.knowledge import Knowledge
+            result = await db.execute(
+                select(Knowledge)
+                .where(Knowledge.project_id == str(project.id),
+                       Knowledge.locked == 1,
+                       Knowledge.status == "active")
+                .order_by(Knowledge.category)
+            )
+            locked_items = result.scalars().all()
+            if locked_items:
+                parts = []
+                for kn in locked_items:
+                    parts.append(f"- [{kn.category}] {kn.title}: {kn.content[:300]}")
+                locked_knowledge_section = (
+                    "\n\n### 已锁定世界观（以下设定已确认，正文中必须保持一致，不得改动）\n"
+                    + "\n".join(parts)
+                )
+        except Exception:
+            pass
 
         # ── Phase 17: 记忆系统替换 context_service ─────────────────
         prev_summary = ""
@@ -209,6 +254,18 @@ class AIService:
             )
 
         # ── Phase 15.1：题材模板配置注入 ──────────────────────────────
+        # 先读 story_core.targetWords（用户在设置页配置的每章目标字数）
+        story_core_raw = project.story_core
+        if isinstance(story_core_raw, str):
+            try:
+                import json as _json
+                story_core_raw = _json.loads(story_core_raw)
+            except Exception:
+                story_core_raw = {}
+        elif story_core_raw is None:
+            story_core_raw = {}
+        target_wc = story_core_raw.get("targetWords") or 2500
+
         template_section = ""
         if project.template_id:
             try:
@@ -224,7 +281,11 @@ class AIService:
                     parts = []
                     if style.get("vocabulary"):
                         parts.append(f"语言风格：{style['vocabulary']}")
-                    wc = pacing.get("typical_chapter_word_count", 2500)
+                    # 优先使用 story_core.targetWords，否则回退到模板 pacing
+                    wc = target_wc if target_wc != 2500 else pacing.get("typical_chapter_word_count", 2500)
+                    if not wc or wc == 2500:
+                        wc = pacing.get("typical_chapter_word_count", 2500)
+                    target_wc = wc  # 更新最终生效值，后面 max_tokens 要用
                     parts.append(f"本章建议字数：约 {wc} 字")
                     if pacing.get("min_hook_per_chapter"):
                         parts.append(f"本章至少包含 {pacing['min_hook_per_chapter']} 个钩子")
@@ -289,7 +350,7 @@ class AIService:
             pass  # 任务书加载失败不影响章节生成
 
         messages = [
-            {"role": "system", "content": prompt["system"] + ANTI_HALLUCINATION_LAWS + "\n\n" + writing_guide_section},
+            {"role": "system", "content": prompt["system"] + ANTI_HALLUCINATION_LAWS},
             {"role": "user", "content": prompt["user"].format(
                 name=project.name,
                 genre=project.genre,
@@ -308,15 +369,17 @@ class AIService:
         ]
 
         client = await self._build_client(db)
+        # 根据目标字数动态调整 max_tokens：5000字约需6000 tokens
+        max_tok = max(3000, int(target_wc * 1.2))
         try:
             # 尝试流式生成
             streamed = False
-            async for chunk in await client.chat(messages, temperature=0.8, stream=True):
+            async for chunk in await client.chat(messages, temperature=0.8, stream=True, max_tokens=max_tok):
                 yield chunk
                 streamed = True
             # 如果流式没输出任何内容，回退到非流式
             if not streamed:
-                result = await client.chat(messages, temperature=0.8, stream=False)
+                result = await client.chat(messages, temperature=0.8, stream=False, max_tokens=max_tok)
                 yield str(result)
         finally:
             await client.close()
@@ -422,7 +485,10 @@ class AIService:
             await client.close()
 
     async def de_ai_rewrite_sync(self, db: AsyncSession, content: str) -> str:
-        """De-AI rewrite — synchronous version (non-streaming)."""
+        """De-AI rewrite — synchronous version (non-streaming).
+
+        Uses max_tokens=12000 and temperature=0.9 for structural de-AI rewrite.
+        """
         prompt = self._load_prompt("de_ai")
         messages = [
             {"role": "system", "content": prompt["system"]},
@@ -432,7 +498,9 @@ class AIService:
         ]
         client = await self._build_client(db)
         try:
-            return str(await client.chat(messages, temperature=0.9))
+            return str(await client.chat(
+                messages, temperature=0.9, max_tokens=12000,
+            ))
         finally:
             await client.close()
 

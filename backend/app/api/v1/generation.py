@@ -49,6 +49,35 @@ vector_service = VectorSearchService(
 )
 
 
+from sqlalchemy import select, func
+from app.models.knowledge import Knowledge
+
+async def _detect_knowledge_conflicts(
+    db: AsyncSession, project_id: str, title: str, new_content: str,
+) -> bool:
+    """Check if a knowledge item conflicts with existing locked entries."""
+    result = await db.execute(
+        select(Knowledge)
+        .where(
+            Knowledge.project_id == project_id,
+            Knowledge.title == title,
+            Knowledge.locked == 1,
+            Knowledge.status == "active",
+        )
+    )
+    existing = result.scalars().all()
+    for item in existing:
+        if item.content and new_content:
+            # Simple overlap check: if >30% of words overlap, treat as same fact
+            old_words = set(item.content[:200].replace("\n", " ").split())
+            new_words = set(new_content[:200].replace("\n", " ").split())
+            if len(old_words) > 0 and len(new_words) > 0:
+                overlap = len(old_words & new_words) / max(len(old_words | new_words), 1)
+                if overlap > 0.30:
+                    return True
+    return False
+
+
 async def _save_knowledge(
     db: AsyncSession,
     project_id: str,
@@ -56,10 +85,24 @@ async def _save_knowledge(
     source_type: str,
     source_id: str | None = None,
 ):
-    """Save extracted knowledge items to database."""
+    """Save extracted knowledge items to database.
+
+    - Locked entries are protected from overwrite.
+    - Conflicts with locked entries are stored as status='pending'.
+    - Conflicting content is flagged so user can review.
+    """
     for item in items:
         if not item.get("title") or not item.get("content"):
             continue
+        # Check for conflicts with locked entries
+        has_conflict = await _detect_knowledge_conflicts(
+            db, project_id, item["title"], item["content"]
+        )
+        if has_conflict:
+            status = "pending"
+        else:
+            status = "active"
+
         kn = Knowledge(
             project_id=project_id,
             title=item["title"],
@@ -69,6 +112,9 @@ async def _save_knowledge(
             source="auto",
             source_type=source_type,
             source_id=source_id,
+            status=status,
+            locked=0,
+            confidence_int=50 if has_conflict else 70,
         )
         db.add(kn)
     await db.commit()
@@ -442,7 +488,12 @@ async def generate_chapter(
                 existing = project.context or {}
                 existing["style_guidance"] = style_guidance
                 existing["last_ai_flavor_score"] = flavor_result["score"]
-                project.context = existing
+                from sqlalchemy import update as sql_update
+                await db.execute(
+                    sql_update(Project)
+                    .where(Project.id == project_id)
+                    .values(context=existing)
+                )
                 await db.commit()
         except Exception:
             pass  # 不影响主流程
@@ -470,7 +521,6 @@ async def generate_chapter(
             })}
             async for event in _run_auto_pipeline(
                 db, UUID(project_id), chapter.id,
-                skip_final_commit=True,
             ):
                 yield {"data": json.dumps(event)}
         except Exception as e:
@@ -624,63 +674,6 @@ async def generate_outline(
     }
 
 
-@router.post("/consistency/check")
-async def check_consistency(
-    project_id: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    """Check consistency of the latest chapter against existing content."""
-    project = await db.get(Project, project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
-
-    # Get latest chapter
-    result = await db.execute(
-        select(Chapter)
-        .where(Chapter.project_id == project_id)
-        .order_by(Chapter.chapter_number.desc())
-        .limit(1)
-    )
-    latest_chapter = result.scalar_one_or_none()
-    if not latest_chapter:
-        raise HTTPException(400, "No chapters to check")
-
-    # Get all chapters
-    result = await db.execute(
-        select(Chapter)
-        .where(Chapter.project_id == project_id)
-        .order_by(Chapter.chapter_number.asc())
-    )
-    all_chapters = list(result.scalars().all())
-
-    # Get worldview and characters for context
-    result = await db.execute(
-        select(Worldview).where(Worldview.project_id == project_id)
-    )
-    worldview = result.scalar_one_or_none()
-
-    result = await db.execute(
-        select(Character).where(Character.project_id == project_id)
-    )
-    characters = list(result.scalars().all())
-
-    # Build existing content summary
-    existing_content = []
-    if project.story_core:
-        existing_content.append({"type": "story_core", "data": project.story_core})
-    if worldview:
-        existing_content.append({"type": "worldview", "data": worldview.description})
-    for c in characters:
-        existing_content.append({"type": "character", "data": c.name, "details": c.background})
-    for ch in all_chapters[:-1]:  # Exclude the latest
-        existing_content.append({"type": "chapter", "number": ch.chapter_number, "summary": ch.summary})
-
-    chapter_text = latest_chapter.content.get("text", "") if isinstance(latest_chapter.content, dict) else str(latest_chapter.content)
-
-    result = await ai_service.check_consistency(db, chapter_text, existing_content)
-    return {"content": result}
-
-
 @router.post("/chapters/{chapter_id}/regenerate")
 async def regenerate_chapter(
     project_id: str,
@@ -723,42 +716,119 @@ async def regenerate_chapter(
     story_core_text = json.dumps(project.story_core, ensure_ascii=False) if project.story_core else ""
     worldview_text = worldview.description if worldview else ""
     target_number = chapter.chapter_number
-
     async def event_generator():
-        full_content = ""
-        async for chunk in ai_service.generate_chapter_stream(
-            db, project, target_number, story_core_text,
-            worldview_text, characters, other_chapters,
-            outline_detail=chapter.outline_detail,
-        ):
-            full_content += chunk
-            yield {"data": json.dumps({"type": "chunk", "text": chunk})}
-
-        # Update chapter content in place
-        # Save old version to history first
-        await version_service.save_and_bump(db, chapter, based_on={
-            "story_core": int((project.story_core or {}).get("_version", 0) or 0),
-            "worldview": worldview._version or 0 if worldview else 0,
-            "characters": max((c._version or 0 for c in other_chapters), default=0),
-        })
-        chapter.content = {"text": full_content}
-        chapter.word_count = len(full_content)
-        chapter._stale = "false"
-        await db.commit()
-
-        # Auto-extract knowledge from regenerated chapter
         try:
-            kn_items = await ai_service.extract_knowledge(db, full_content, "章节内容")
-            await _save_knowledge(db, project_id, kn_items, "chapter", str(chapter_id))
-        except Exception:
-            pass
+            full_content = ""
+            async for chunk in ai_service.generate_chapter_stream(
+                db, project, target_number, story_core_text,
+                worldview_text, characters, other_chapters,
+                outline_detail=chapter.outline_detail,
+            ):
+                full_content += chunk
+                yield {"data": json.dumps({"type": "chunk", "text": chunk})}
 
-        yield {"data": json.dumps({
-            "type": "done",
-            "chapter_id": str(chapter_id),
-            "chapter_number": target_number,
-            "word_count": len(full_content),
-        })}
+            # ── 机械润色（Rule 5/8/10/11/12：连接词删除、心理→动作、句长波动、模糊语气、停顿注入）──
+            try:
+                import subprocess
+                _SCRIPT = "/Users/products/code/ai-novel-workstation/backend/scripts/humanize.py"
+                _tmp = "/tmp/_humanize_in.txt"
+                _out = "/tmp/_humanize_out.txt"
+                with open(_tmp, "w", encoding="utf-8") as _f:
+                    _f.write(full_content)
+                _result = subprocess.run(
+                    ["python3", _SCRIPT, _tmp, _out],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if _result.returncode == 0:
+                    with open(_out, "r", encoding="utf-8") as _f:
+                        full_content = _f.read()
+                    yield {"data": json.dumps({"type": "humanize", "status": "completed", "note": "机械润色"})}
+                else:
+                    yield {"data": json.dumps({"type": "humanize", "status": "skipped", "error": _result.stderr[:200]})}
+            except Exception as pe:
+                yield {"data": json.dumps({"type": "humanize", "status": "skipped", "error": str(pe)[:200]})}
+
+            # ── LLM 重写润色（humanize_novel Skill：整体节奏、作者习惯、信息分散）──
+            try:
+                _skill_path = "/Users/products/code/ai-novel-workstation/backend/prompts/skills/humanize_novel.md"
+                _skill_content = ""
+                try:
+                    with open(_skill_path, "r", encoding="utf-8") as _f:
+                        _skill_content = _f.read()
+                except Exception:
+                    pass
+
+                _rewrite_prompt = (
+                    "你是小说润色专家。请将以下章节按 humanize_novel 规范重写。\n\n"
+                    + _skill_content
+                    + "\n\n"
+                    "原文如下（请基于这篇原文重写，不改变剧情、人物、世界观、伏笔，只做文风润色）：\n\n"
+                    "【原文开始】\n"
+                    + full_content[:8000]
+                    + "\n【原文结束】\n\n"
+                    "请直接输出重写后的全文，不要解释，不要加注释。"
+                )
+
+                _client = await ai_service._build_client_with_provider(db, 8)
+                try:
+                    _rewrite_result = ""
+                    yield {"data": json.dumps({"type": "rewrite", "status": "started"})}
+                    async for _chunk in await _client.chat(
+                        [{"role": "user", "content": _rewrite_prompt}],
+                        temperature=0.9,
+                        max_tokens=4000,
+                        stream=True,
+                    ):
+                        _rewrite_result += _chunk
+                        yield {"data": json.dumps({"type": "rewrite_chunk", "text": _chunk})}
+                finally:
+                    await _client.close()
+                if _rewrite_result and isinstance(_rewrite_result, str) and len(_rewrite_result) > 500:
+                    full_content = _rewrite_result
+                    yield {"data": json.dumps({"type": "rewrite", "status": "completed", "note": f"字数={len(_rewrite_result)}"})}
+                else:
+                    yield {"data": json.dumps({"type": "rewrite", "status": "skipped", "note": "LLM返回为空"})}
+            except Exception as pe:
+                yield {"data": json.dumps({"type": "rewrite", "status": "skipped", "error": str(pe)[:200]})}
+
+            # Save old version to history first
+            await version_service.save_and_bump(db, chapter, based_on={
+                "story_core": int((project.story_core or {}).get("_version", 0) or 0),
+                "worldview": worldview._version or 0 if worldview else 0,
+                "characters": max((c._version or 0 for c in other_chapters), default=0),
+            })
+
+            # Direct SQL UPDATE to avoid SQLAlchemy JSON column dirty-tracking issue
+            # where save_and_bump.snapshot_node reads chapter.content, interfering with
+            # subsequent ORM attribute assignment detection
+            from sqlalchemy import update as sql_update
+            await db.execute(
+                sql_update(Chapter)
+                .where(Chapter.id == chapter_id)
+                .values(
+                    content={"text": full_content},
+                    word_count=len(full_content),
+                    _stale="false",
+                )
+            )
+            await db.commit()
+
+            # Auto-extract knowledge from regenerated chapter
+            try:
+                kn_items = await ai_service.extract_knowledge(db, full_content, "章节内容")
+                await _save_knowledge(db, project_id, kn_items, "chapter", str(chapter_id))
+            except Exception:
+                pass
+
+            yield {"data": json.dumps({
+                "type": "done",
+                "chapter_id": str(chapter_id),
+                "chapter_number": target_number,
+                "word_count": len(full_content),
+            })}
+        except Exception as e:
+            import traceback
+            yield {"data": json.dumps({"type": "error", "error": str(e), "trace": traceback.format_exc()[:1000]})}
 
     return EventSourceResponse(event_generator())
 

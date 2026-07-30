@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.database import get_db, engine as db_engine
 from app.models.project import Project
@@ -173,10 +174,14 @@ async def _run_auto_pipeline(
                         s, chapter,
                         review_result=dict(report),
                     )
-                    # 保存润色后的正文回数据库
+                    # 保存润色后的正文回数据库 (direct SQL, bypass session identity map)
                     polished_text = polish_output.polished_content
-                    chapter.content = {"text": polished_text}  # type: ignore[assignment]
-                    chapter.word_count = len(polished_text)  # type: ignore[assignment]
+                    from sqlalchemy import update as _sql_update
+                    await s.execute(
+                        _sql_update(Chapter)
+                        .where(Chapter.id == chapter.id)
+                        .values(content={"text": polished_text}, word_count=len(polished_text))
+                    )
                     stage_results["polish"] = {
                         "status": "ok",
                         "result": {
@@ -210,49 +215,33 @@ async def _run_auto_pipeline(
         yield {"type": "progress", "stage": "polish", "status": "done",
                "detail": {"changes": polish_result.get("steps") if polish_result else None}}
 
-        # ── Stage 2.6: AI 味检测 ──────────────────────────────────
+        # ── Stage 2.6: 朱雀 AI 检测（主检）+ 正则辅助 ──────────────
         yield {"type": "progress", "stage": "ai_detect", "status": "running",
                "detail": {"label": STAGE_LABELS["ai_detect"]}}
         ai_detect_result: dict | None = None
-        zhuque_result: dict | None = None
         try:
             from app.services.ai_flavor_detector import detect_ai_flavor
+            from app.services.zhuque_real import detect_ai_generation as _zhuque_detect
             chapter_text = polish_service._extract_chapter_text(chapter)
-            detect_result = detect_ai_flavor(chapter_text)
-            detect_score = detect_result.get("score", 50)
-            ai_detect_result = {
-                "score": detect_score,
-                "level": detect_result.get("level"),
-                "detection_count": len(detect_result.get("issues", [])),
-                "issues": detect_result.get("issues", [])[:10],
-                "needs_rewrite": detect_score < 50,
-                "summary": f"{len(detect_result.get('issues', []))} 处 AI 味特征，综合得分 {detect_score}/100",
-            }
-            # 如果 AI 味太重 → 调 de_ai_rewrite_sync
-            if detect_score < 50:
-                try:
-                    s2 = _new_stage_session()
-                    try:
-                        rewritten = await ai_service.de_ai_rewrite_sync(s2, chapter_text)
-                        chapter.content = {"text": rewritten}  # type: ignore[assignment]
-                        chapter.word_count = len(rewritten)  # type: ignore[assignment]
-                        await s2.commit()
-                        ai_detect_result["rewritten"] = True
-                        ai_detect_result["new_word_count"] = len(rewritten)
-                        chapter_text = rewritten  # 用改写后文本做 zhuque 检测
-                    except Exception:
-                        await s2.rollback()
-                        raise
-                    finally:
-                        await s2.close()
-                except Exception:
-                    ai_detect_result["rewritten"] = False
-                    ai_detect_result["rewrite_error"] = "de_ai_rewrite 失败"
 
-            # ── Stage 2.6b: 朱雀检测（AI 生成鉴定）─────────────
-            from app.services.zhuque_detector import detect_ai_generation
-            zhuque_result = await detect_ai_generation(chapter_text)
-            ai_detect_result["zhuque"] = zhuque_result
+            # 1) 正则辅助检测（八股词/句式）
+            regex_result = detect_ai_flavor(chapter_text)
+            regex_score = regex_result.get("score", 0)
+
+            # 2) 朱雀检测（仅报告，不触发重写）
+            zhuque_result = await _zhuque_detect(chapter_text)
+            zhuque_prob = zhuque_result.get("ai_probability", 0)
+
+            ai_detect_result = {
+                "regex_score": regex_score,
+                "regex_level": regex_result.get("level"),
+                "zhuque_probability": zhuque_prob,
+                "zhuque_verdict": zhuque_result.get("verdict"),
+                "zhuque_level": zhuque_result.get("level"),
+                "needs_rewrite": False,
+                "summary": f"朱雀AI概率 {zhuque_prob:.1%}（{zhuque_result.get('verdict','')}），正则得分 {regex_score}/100。仅做预警参考，不触发自动重写",
+            }
+
             stage_results["ai_detect"] = {"status": "ok", "result": ai_detect_result}
             yield {"type": "ai_detect_complete", "data": ai_detect_result}
         except Exception as e:
@@ -260,7 +249,8 @@ async def _run_auto_pipeline(
             yield {"type": "ai_detect_complete", "data": {"error": str(e)}}
 
         yield {"type": "progress", "stage": "ai_detect", "status": "done",
-               "detail": {"score": ai_detect_result.get("score") if ai_detect_result else None}}
+               "detail": {"zhuque_prob": ai_detect_result.get("zhuque_probability") if ai_detect_result else None,
+                          "rewritten": ai_detect_result.get("rewritten") if ai_detect_result else False}}
 
         # ── Stage 2.5: 写后强制校验 ──────────────────────────────
         yield {"type": "progress", "stage": "validation", "status": "running",

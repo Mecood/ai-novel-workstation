@@ -70,6 +70,42 @@ interface ChapterDraft extends Chapter {
   draftPacing: string;
 }
 
+const fmtHighlightRhythm = (v: unknown): string => {
+  if (v == null || typeof v !== 'object') return '';
+  const { peaks, pattern } = v as Record<string, unknown>;
+  const lines = [];
+  if (Array.isArray(peaks)) lines.push(`峰值章节：${peaks.join('、')}`);
+  if (typeof pattern === 'string') lines.push(`节奏模式：${pattern}`);
+  return lines.join('\n');
+};
+
+const fmtEmotionArc = (v: unknown): string => {
+  if (v == null || typeof v !== 'object') return '';
+  const { curve, key_beats } = v as Record<string, unknown>;
+  const lines = [];
+  if (typeof curve === 'string') lines.push(`情绪曲线：${curve}`);
+  if (Array.isArray(key_beats)) lines.push(`关键节拍：${key_beats.join('、')}`);
+  return lines.join('\n');
+};
+
+const fmtForeshadowingNotes = (v: unknown): string => {
+  if (v == null || typeof v !== 'object') return '';
+  const { planted, to_resolve } = v as Record<string, unknown>;
+  const lines = [];
+  if (Array.isArray(planted)) lines.push(`已埋设：${planted.join('、')}`);
+  if (Array.isArray(to_resolve)) lines.push(`待回收：${to_resolve.join('、')}`);
+  return lines.join('\n');
+};
+
+const fmtTwists = (v: unknown): string => {
+  if (v == null || typeof v !== 'object') return '';
+  const { midpoint, climax } = v as Record<string, unknown>;
+  const lines = [];
+  if (typeof midpoint === 'string') lines.push(`中点反转：${midpoint}`);
+  if (typeof climax === 'string') lines.push(`卷末高潮：${climax}`);
+  return lines.join('\n');
+};
+
 const toStr = (v: unknown): string => {
   if (v == null) return '';
   if (typeof v === 'string') return v;
@@ -86,10 +122,15 @@ const buildVolumeDraft = (v: Volume): VolumeDraft => ({
   draftDescription: v.description || '',
   draftChapterStart: v.chapter_start ?? 1,
   draftChapterEnd: v.chapter_end ?? null,
-  draftHighlightRhythm: toStr(v.highlight_rhythm),
-  draftEmotionArc: toStr(v.emotion_arc),
-  draftForeshadowingNotes: toStr(v.foreshadowing_notes),
-  draftTwists: toStr(v.twists),
+  draftHighlightRhythm: fmtHighlightRhythm(v.highlight_rhythm),
+  draftEmotionArc: fmtEmotionArc(v.emotion_arc),
+  draftForeshadowingNotes: fmtForeshadowingNotes(v.foreshadowing_notes),
+  draftTwists: fmtTwists(v.twists),
+  // 保存原始 JSON 字符串，用于提交回后端
+  rawHighlightRhythm: v.highlight_rhythm ? JSON.stringify(v.highlight_rhythm) : '',
+  rawEmotionArc: v.emotion_arc ? JSON.stringify(v.emotion_arc) : '',
+  rawForeshadowingNotes: v.foreshadowing_notes ? JSON.stringify(v.foreshadowing_notes) : '',
+  rawTwists: v.twists ? JSON.stringify(v.twists) : '',
 });
 
 const buildChapterDraft = (c: Chapter): ChapterDraft => {
@@ -302,10 +343,10 @@ export default function OutlinePage() {
             description: v.draftDescription || null,
             chapter_start: v.draftChapterStart,
             chapter_end: v.draftChapterEnd,
-            highlight_rhythm: v.draftHighlightRhythm || null,
-            emotion_arc: v.draftEmotionArc || null,
-            foreshadowing_notes: v.draftForeshadowingNotes || null,
-            twists: v.draftTwists || null,
+            highlight_rhythm: v.rawHighlightRhythm ? JSON.parse(v.rawHighlightRhythm) : null,
+            emotion_arc: v.rawEmotionArc ? JSON.parse(v.rawEmotionArc) : null,
+            foreshadowing_notes: v.rawForeshadowingNotes ? JSON.parse(v.rawForeshadowingNotes) : null,
+            twists: v.rawTwists ? JSON.parse(v.rawTwists) : null,
           }),
         ),
       );

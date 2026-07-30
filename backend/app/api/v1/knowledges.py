@@ -54,6 +54,25 @@ async def list_knowledges(
     return [KnowledgeResponse.model_validate(n) for n in notes]
 
 
+@router.get("/pending", response_model=list[KnowledgeResponse])
+async def list_pending_knowledges(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """List knowledge items with status='pending' (conflicting, needs user review)."""
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    query = select(Knowledge).where(
+        Knowledge.project_id == project_id,
+        Knowledge.status == "pending",
+    ).order_by(Knowledge.created_at.desc())
+    result = await db.execute(query)
+    notes = result.scalars().all()
+    return [KnowledgeResponse.model_validate(n) for n in notes]
+
+
 @router.get("/{knowledge_id}", response_model=KnowledgeResponse)
 async def get_knowledge(
     project_id: UUID,
@@ -86,6 +105,30 @@ async def update_knowledge(
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(note, field, value)
+
+    await db.commit()
+    await db.refresh(note)
+    return KnowledgeResponse.model_validate(note)
+
+@router.patch("/{knowledge_id}/lock", response_model=KnowledgeResponse)
+async def lock_knowledge(
+    project_id: UUID,
+    knowledge_id: UUID,
+    data: KnowledgeUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Lock or unlock a knowledge entry, and/or promote pending to active."""
+    result = await db.execute(
+        select(Knowledge).where(Knowledge.id == knowledge_id, Knowledge.project_id == project_id)
+    )
+    note = result.scalar_one_or_none()
+    if not note:
+        raise HTTPException(status_code=404, detail="Knowledge not found")
+
+    if data.locked is not None:
+        note.locked = int(data.locked)
+    if data.status is not None:
+        note.status = data.status
 
     await db.commit()
     await db.refresh(note)
